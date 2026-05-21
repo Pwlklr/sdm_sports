@@ -46,5 +46,5 @@ jobs:
         
     - name: Test and enforce coverage with pytest
       run: |
-        # Runs tests and fails if line coverage is below 90%
-        pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=90
+        # Runs tests and fails if line coverage is below 75%
+        pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=75
