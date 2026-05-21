@@ -1,17 +1,26 @@
-from typing import List
-from src.core.state import ContestState
-from src.core.ruleset import RuleSet
-from src.core.events import ContestEvent
-from src.core.participants import Team
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.core.contest_event import ContestEvent
+    from src.core.contest_state import ContestState
+    from src.core.ruleset import RuleSet
+    from src.core.team import Team
+
 
 class Contest:
+    contest_id: str
+    teams: list[Team]
+    current_state: ContestState
+
     def __init__(
-        self, 
-        contest_id: str, 
-        teams: List[Team], 
-        initial_state: ContestState, 
-        ruleset: RuleSet
-    ):
+        self,
+        contest_id: str,
+        teams: list[Team],
+        initial_state: ContestState,
+        ruleset: RuleSet,
+    ) -> None:
         self.contest_id = contest_id
         self.teams = teams
         self.current_state = initial_state
