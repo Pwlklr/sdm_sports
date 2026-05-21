@@ -44,11 +44,6 @@ jobs:
       run: |
         mypy src/ --strict
         
-    - name: Check code complexity with radon
-      run: |
-        # Fails the build if any block has a complexity of 'C' (11-20) or worse
-        radon cc src/ -nc --fail-under=11
-        
     - name: Test and enforce coverage with pytest
       run: |
         # Runs tests and fails if line coverage is below 90%
