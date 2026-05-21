@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 
+
 class Observer(ABC):
     @abstractmethod
     def update(self, subject) -> None:
         """Called when the observed subject changes state."""
         pass
+
 
 class Subject(ABC):
     def __init__(self):

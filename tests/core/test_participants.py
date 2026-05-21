@@ -1,6 +1,7 @@
 import pytest
 from src.core.participants import Contestant, Team
 
+
 def test_team_manages_contestants():
     # Arrange
     player1 = Contestant(contestant_id="P1", name="Player One")

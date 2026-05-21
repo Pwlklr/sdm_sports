@@ -5,14 +5,16 @@ from src.core.events import ContestEvent
 from src.core.participants import Team
 from src.core.observer import Subject
 
+
 class Contest(Subject):
     """A generic container representing a single match between teams[cite: 6]."""
+
     def __init__(
-        self, 
-        contest_id: str, 
-        teams: List[Team], 
-        initial_state: ContestState, 
-        ruleset: RuleSet
+        self,
+        contest_id: str,
+        teams: List[Team],
+        initial_state: ContestState,
+        ruleset: RuleSet,
     ):
         super().__init__()
         self.contest_id = contest_id
