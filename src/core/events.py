@@ -10,7 +10,7 @@ class DomainEvent(ABC):
     state change throughout the system.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.event_id: str = str(uuid.uuid4())
         self.occurred_at: datetime = datetime.now()
 
@@ -22,7 +22,7 @@ class ContestEvent(DomainEvent):
 
     def __init__(
         self, competitor_id: Optional[str] = None, team_id: Optional[str] = None
-    ):
+    ) -> None:
         super().__init__()
         self.competitor_id = competitor_id
         self.team_id = team_id
