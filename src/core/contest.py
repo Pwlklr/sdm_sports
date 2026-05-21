@@ -7,7 +7,7 @@ from src.core.observer import Subject
 
 
 class Contest(Subject):
-    """A generic container representing a single match between teams[cite: 6]."""
+    """A generic container representing a single match between teams."""
 
     def __init__(
         self,
@@ -15,7 +15,7 @@ class Contest(Subject):
         teams: List[Team],
         initial_state: ContestState,
         ruleset: RuleSet,
-    ):
+    ) -> None:
         super().__init__()
         self.contest_id = contest_id
         self.teams = teams
@@ -23,7 +23,6 @@ class Contest(Subject):
         self._ruleset = ruleset
 
     def process_event(self, event: ContestEvent) -> None:
-        """Delegates the event to be handled based on the RuleSet assigned[cite: 6]."""
+        """Delegates the event to be handled based on the RuleSet assigned."""
         self._ruleset.evaluate(event, self.current_state)
-        # Notify observers (like the TournamentPhase) that state may have changed
         self.notify()

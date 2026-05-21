@@ -1,16 +1,18 @@
+from __future__ import annotations
 from abc import ABC, abstractmethod
+from typing import List
 
 
 class Observer(ABC):
     @abstractmethod
-    def update(self, subject) -> None:
+    def update(self, subject: Subject) -> None:
         """Called when the observed subject changes state."""
         pass
 
 
 class Subject(ABC):
-    def __init__(self):
-        self._observers = []
+    def __init__(self) -> None:
+        self._observers: List[Observer] = []
 
     def attach(self, observer: Observer) -> None:
         if observer not in self._observers:
