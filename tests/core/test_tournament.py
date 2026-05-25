@@ -24,7 +24,9 @@ class DummyEvent(ContestEvent):
 
 class DummyRuleSet(RuleSet):
     handlers = {
-        DummyEvent: lambda self, event, state: DummyRuleSet._on_dummy(self, event, state),
+        DummyEvent: lambda self, event, state: DummyRuleSet._on_dummy(
+            self, event, state
+        ),
     }
 
     def _on_dummy(self, event: ContestEvent, state: ContestState) -> list[ContestEvent]:

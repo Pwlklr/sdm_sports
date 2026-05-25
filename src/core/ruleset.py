@@ -11,12 +11,12 @@ if TYPE_CHECKING:
     from src.core.contest_state import ContestState
 
 
-
 class RuleSet(ABC):
     """
     Validates in-match events based on the business rules specific to a given sport
     and tournament phase.
     """
+
     handlers: ClassVar[dict[type[ContestEvent], Handler]]
 
     def __init_subclass__(cls, **kwargs: Any) -> None:

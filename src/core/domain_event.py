@@ -9,6 +9,7 @@ class DomainEvent(ABC):
     """
     The base abstraction representing state change
     """
+
     event_id: str
     occurred_at: datetime
 

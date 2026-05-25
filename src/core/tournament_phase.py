@@ -14,6 +14,7 @@ class TournamentPhase(Observer):
     Represents a specific stage of the tournament that organizes matches
     according to assigned rules.
     """
+
     phase_id: str
     ruleset: RuleSet
     contests: list[Contest]

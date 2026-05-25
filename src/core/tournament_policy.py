@@ -13,6 +13,7 @@ class TournamentPolicy(ABC):
     Defines and enforces the global business rules of the entire tournament
     by reacting to lifecycle events.
     """
+
     @abstractmethod
     def handle(
         self,

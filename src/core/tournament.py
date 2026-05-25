@@ -14,6 +14,7 @@ class Tournament:
     """
     The root aggregate managing participating teams and all phases of the tournament.
     """
+
     tournament_id: str
     teams: list[Team]
     current_state: TournamentState

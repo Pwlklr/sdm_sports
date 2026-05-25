@@ -7,7 +7,6 @@ import pytest
 from src.core.contest_event import ContestEvent
 
 
-
 class DummyEvent(ContestEvent):
     """Concrete dummy event for testing the abstract base behavior."""
 

@@ -7,6 +7,7 @@ class ContestEvent(DomainEvent):
     """
     Denotes events occurring during a specific match.
     """
+
     competitor_id: str | None
     team_id: str | None
 

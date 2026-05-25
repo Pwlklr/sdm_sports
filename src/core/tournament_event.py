@@ -7,4 +7,5 @@ class TournamentEvent(DomainEvent):
     """
     Denotes events that affect the lifecycle of the tournament or a specific phase.
     """
+
     pass
