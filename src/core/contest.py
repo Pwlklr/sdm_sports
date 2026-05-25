@@ -1,18 +1,25 @@
-from typing import List
-from src.core.state import ContestState
-from src.core.ruleset import RuleSet
-from src.core.events import ContestEvent
-from src.core.participants import Team
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from src.core.observer import Subject
+
+if TYPE_CHECKING:
+    from src.core.contest_event import ContestEvent
+    from src.core.contest_state import ContestState
+    from src.core.ruleset import RuleSet
+    from src.core.team import Team
 
 
 class Contest(Subject):
-    """A generic container representing a single match between teams."""
+    contest_id: str
+    teams: list[Team]
+    current_state: ContestState
 
     def __init__(
         self,
         contest_id: str,
-        teams: List[Team],
+        teams: list[Team],
         initial_state: ContestState,
         ruleset: RuleSet,
     ) -> None:
@@ -23,6 +30,5 @@ class Contest(Subject):
         self._ruleset = ruleset
 
     def process_event(self, event: ContestEvent) -> None:
-        """Delegates the event to be handled based on the RuleSet assigned."""
         self._ruleset.evaluate(event, self.current_state)
         self.notify()

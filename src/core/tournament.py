@@ -1,39 +1,38 @@
-from typing import List
-from src.core.participants import Team
-from src.core.contest import Contest
-from src.core.observer import Observer, Subject
+from __future__ import annotations
 
+from typing import TYPE_CHECKING
 
-class TournamentPhase(Observer):
-    """Represents a specific stage of the tournament[cite: 6]."""
-
-    def __init__(self, phase_id: str) -> None:
-        self.phase_id = phase_id
-        self.contests: List[Contest] = []
-        self.completed_contests: int = 0
-
-    def add_contest(self, contest: Contest) -> None:
-        self.contests.append(contest)
-        contest.attach(self)
-
-    def update(self, subject: Subject) -> None:
-        """Triggered by the Subject.notify() method."""
-        # Ensure the subject is a Contest to satisfy LSP and type checking
-        if isinstance(subject, Contest):
-            if subject.current_state.is_final:
-                self.completed_contests += 1
+if TYPE_CHECKING:
+    from src.core.team import Team
+    from src.core.tournament_event import TournamentEvent
+    from src.core.tournament_phase import TournamentPhase
+    from src.core.tournament_policy import TournamentPolicy
+    from src.core.tournament_state import TournamentState
 
 
 class Tournament:
-    """The root aggregate managing the global list of participating teams and all phases[cite: 6]."""
+    """
+    The root aggregate managing participating teams and all phases of the tournament.
+    """
 
-    def __init__(self, tournament_id: str) -> None:
+    tournament_id: str
+    teams: list[Team]
+    current_state: TournamentState
+    phases: list[TournamentPhase]
+
+    def __init__(
+        self,
+        tournament_id: str,
+        teams: list[Team],
+        initial_state: TournamentState,
+        policy: TournamentPolicy,
+        phases: list[TournamentPhase] | None = None,
+    ) -> None:
         self.tournament_id = tournament_id
-        self.teams: List[Team] = []
-        self.phases: List[TournamentPhase] = []
+        self.teams = teams
+        self.current_state = initial_state
+        self._policy = policy
+        self.phases = phases if phases is not None else []
 
-    def add_team(self, team: Team) -> None:
-        self.teams.append(team)
-
-    def add_phase(self, phase: TournamentPhase) -> None:
-        self.phases.append(phase)
+    def process_event(self, event: TournamentEvent) -> None:
+        self._policy.handle(event, self.current_state)
