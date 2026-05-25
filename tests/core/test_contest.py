@@ -9,6 +9,7 @@ from src.core.ruleset import RuleSet
 from src.core.team import Team
 
 
+
 class DummyState(ContestState):
     score: int
 

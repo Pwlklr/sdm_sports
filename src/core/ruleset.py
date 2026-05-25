@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from src.core.contest_state import ContestState
 
 
+
 class RuleSet(ABC):
     """
     Validates in-match events based on the business rules specific to a given sport

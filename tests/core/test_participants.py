@@ -6,6 +6,7 @@ from src.core.contestant import Contestant
 from src.core.team import Team
 
 
+
 def test_team_manages_contestants():
     player1 = Contestant(contestant_id="P1", name="Player One")
     player2 = Contestant(contestant_id="P2", name="Player Two")

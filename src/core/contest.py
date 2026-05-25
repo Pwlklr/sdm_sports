@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from src.core.observer import Subject
+
 if TYPE_CHECKING:
     from src.core.contest_event import ContestEvent
     from src.core.contest_state import ContestState
@@ -9,7 +11,7 @@ if TYPE_CHECKING:
     from src.core.team import Team
 
 
-class Contest:
+class Contest(Subject):
     contest_id: str
     teams: list[Team]
     current_state: ContestState
@@ -21,6 +23,7 @@ class Contest:
         initial_state: ContestState,
         ruleset: RuleSet,
     ) -> None:
+        super().__init__()
         self.contest_id = contest_id
         self.teams = teams
         self.current_state = initial_state
@@ -28,3 +31,4 @@ class Contest:
 
     def process_event(self, event: ContestEvent) -> None:
         self._ruleset.evaluate(event, self.current_state)
+        self.notify()
