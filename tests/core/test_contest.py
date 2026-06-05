@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 
 from src.core.contest import Contest
 from src.core.contest_event import ContestEvent

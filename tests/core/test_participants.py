@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 
 from src.core.contestant import Contestant
 from src.core.team import Team
