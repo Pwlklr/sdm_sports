@@ -3,3 +3,5 @@ packaging==26.2
 pluggy==1.6.0
 Pygments==2.20.0
 pytest==9.0.3
+black
+ruff
