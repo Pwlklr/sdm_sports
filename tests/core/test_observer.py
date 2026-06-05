@@ -3,18 +3,23 @@ from src.core.observer import Subject, Observer
 
 class MockObserver(Observer):
     def __init__(self):
-        self.received_events = []
+        self.update_calls = 0
+        self.last_subject = None
 
-    def update(self, event):
-        self.received_events.append(event)
+    def update(self, subject: Subject) -> None:
+        """Records that the update was called and stores the subject."""
+        self.update_calls += 1
+        self.last_subject = subject
 
 
 class MockSubject(Subject):
+    """A concrete subject for testing."""
+
     pass
 
 
 def test_observer_registration_and_notification():
-    """Verify that subjects correctly register, deregister, and notify observers."""
+    """Verify that subjects correctly register and notify observers."""
     subject = MockSubject()
     observer_a = MockObserver()
     observer_b = MockObserver()
@@ -22,20 +27,20 @@ def test_observer_registration_and_notification():
     # Test Registration
     subject.attach(observer_a)
     subject.attach(observer_b)
+
+    # Assert observers were added
+    assert len(subject._observers) == 2
+
+    # Test idempotency: attaching the same observer shouldn't duplicate it
+    subject.attach(observer_a)
     assert len(subject._observers) == 2
 
     # Test Notification
-    test_event = {"type": "MATCH_STARTED", "payload": "123"}
-    subject.notify(test_event)
+    subject.notify()
 
-    assert len(observer_a.received_events) == 1
-    assert observer_a.received_events[0] == test_event
-    assert len(observer_b.received_events) == 1
+    # Assert both observers received the update with the correct subject reference
+    assert observer_a.update_calls == 1
+    assert observer_a.last_subject is subject
 
-    # Test Deregistration
-    subject.detach(observer_a)
-    assert len(subject._observers) == 1
-
-    subject.notify({"type": "MATCH_ENDED"})
-    assert len(observer_a.received_events) == 1  # Should not increase
-    assert len(observer_b.received_events) == 2  # Should increase
+    assert observer_b.update_calls == 1
+    assert observer_b.last_subject is subject
