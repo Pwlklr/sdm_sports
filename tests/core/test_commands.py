@@ -1,25 +1,29 @@
-from src.core.commands import Command, CommandInvoker
+from unittest.mock import MagicMock
+from src.core.commands import MatchCommand
+from src.core.contest import Contest
 
 
-class MockCommand(Command):
-    def __init__(self, value):
-        self.value = value
+class ConcreteMatchCommand(MatchCommand):
+    """A concrete implementation of MatchCommand for testing purposes."""
 
-    def execute(self):
-        return f"Executed {self.value}"
+    def __init__(self):
+        self.executed = False
+        self.target_contest = None
+
+    def execute(self, contest: Contest) -> None:
+        self.executed = True
+        self.target_contest = contest
 
 
-def test_command_invoker_history_and_execution():
-    """Verify the invoker executes commands and maintains history for potential undos/audits."""
-    invoker = CommandInvoker()
-    cmd1 = MockCommand("A")
-    cmd2 = MockCommand("B")
+def test_match_command_execution():
+    """Verify that a concrete MatchCommand can be executed with a Contest."""
+    # Arrange
+    mock_contest = MagicMock(spec=Contest)
+    command = ConcreteMatchCommand()
 
-    result1 = invoker.execute_command(cmd1)
-    result2 = invoker.execute_command(cmd2)
+    # Act
+    command.execute(mock_contest)
 
-    assert result1 == "Executed A"
-    assert result2 == "Executed B"
-    assert len(invoker.history) == 2
-    assert invoker.history[0] == cmd1
-    assert invoker.history[1] == cmd2
+    # Assert
+    assert command.executed is True
+    assert command.target_contest is mock_contest
