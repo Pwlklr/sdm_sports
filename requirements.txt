@@ -5,3 +5,4 @@ Pygments==2.20.0
 pytest==9.0.3
 black
 ruff
+pytest-cov
