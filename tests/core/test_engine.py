@@ -25,12 +25,13 @@ class DummyCommand(MatchCommand):
 def test_engine_player_management() -> None:
     engine = SportsSystemEngine()
     
-    p1 = engine.create_individual_player("Phil Taylor")
+    p1 = engine.create_individual_player("Phil Taylor", metadata={"nickname": "The Power"})
     team = engine.create_team("FC Python")
     
     assert p1.id in engine.global_players
     assert team.id in engine.global_players
     assert engine.global_players[p1.id].name == "Phil Taylor"
+    assert engine.global_players[p1.id].metadata["nickname"] == "The Power"
     assert engine.global_players[team.id].name == "FC Python"
 
 def test_engine_tournament_management() -> None:
@@ -57,3 +58,16 @@ def test_engine_match_dispatch() -> None:
     # Dispatching to an unknown match should fail securely
     with pytest.raises(ValueError, match="not found in active memory"):
         engine.dispatch_match_command("invalid_match_id", cmd)
+
+def test_engine_archiving() -> None:
+    engine = SportsSystemEngine()
+    match = Contest([], DummyState(), DummyRuleSet())
+    engine.register_active_match(match)
+    
+    engine.archive_match(match.id)
+    
+    assert match.id not in engine.active_matches
+    assert match.id in engine.archived_matches
+    
+    with pytest.raises(ValueError):
+        engine.archive_match("invalid_id")

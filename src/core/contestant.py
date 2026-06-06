@@ -1,15 +1,16 @@
 import uuid
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Dict, Optional
 
 
 class Contestant(ABC):
     """
     Base interface for any entity participating in a match (Individual or Team).
     """
-    def __init__(self, name: str, contestant_id: str | None = None) -> None:
+    def __init__(self, name: str, contestant_id: str | None = None, metadata: Optional[Dict[str, str]] = None) -> None:
         self.name = name
         self.id = contestant_id or str(uuid.uuid4())
+        self.metadata: Dict[str, str] = metadata or {}
 
     @property
     @abstractmethod
@@ -39,8 +40,8 @@ class Team(Contestant):
     """
     Represents a collection of players (e.g., a Football team or Darts doubles team).
     """
-    def __init__(self, name: str, contestant_id: str | None = None) -> None:
-        super().__init__(name, contestant_id)
+    def __init__(self, name: str, contestant_id: str | None = None, metadata: Optional[Dict[str, str]] = None) -> None:
+        super().__init__(name, contestant_id, metadata)
         self._roster: List[IndividualPlayer] = []
 
     def add_player(self, player: IndividualPlayer) -> None:

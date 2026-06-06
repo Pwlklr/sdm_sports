@@ -15,6 +15,12 @@ def test_contestant_equality() -> None:
     assert player1 == player2
     assert player1 != player3
 
+def test_metadata_storage() -> None:
+    metadata = {"nickname": "The Power", "nationality": "ENG"}
+    p1 = IndividualPlayer("Phil Taylor", metadata=metadata)
+    assert p1.metadata["nickname"] == "The Power"
+    assert p1.metadata["nationality"] == "ENG"
+
 def test_team_roster_management() -> None:
     team = Team("FC Python", contestant_id="t1")
     player1 = IndividualPlayer("Alice")

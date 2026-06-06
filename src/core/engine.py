@@ -15,16 +15,17 @@ class SportsSystemEngine:
         self.global_players: Dict[str, Contestant] = {}
         self.tournaments: Dict[str, Tournament] = {}
         self.active_matches: Dict[str, Contest] = {}
+        self.archived_matches: Dict[str, Contest] = {}
 
-    def create_individual_player(self, name: str) -> IndividualPlayer:
+    def create_individual_player(self, name: str, metadata: Optional[Dict[str, str]] = None) -> IndividualPlayer:
         """Registers a new individual player globally in the system."""
-        player = IndividualPlayer(name)
+        player = IndividualPlayer(name, metadata=metadata)
         self.global_players[player.id] = player
         return player
         
-    def create_team(self, name: str) -> Team:
+    def create_team(self, name: str, metadata: Optional[Dict[str, str]] = None) -> Team:
         """Registers a new team globally in the system."""
-        team = Team(name)
+        team = Team(name, metadata=metadata)
         self.global_players[team.id] = team
         return team
 
@@ -41,6 +42,14 @@ class SportsSystemEngine:
     def get_match(self, match_id: str) -> Optional[Contest]:
         """Retrieves a match from memory by its ID."""
         return self.active_matches.get(match_id)
+
+    def archive_match(self, match_id: str) -> None:
+        """Moves a finished match from active memory to the archive repository."""
+        if match_id not in self.active_matches:
+            raise ValueError(f"Match with ID '{match_id}' not found in active memory.")
+        
+        match = self.active_matches.pop(match_id)
+        self.archived_matches[match.id] = match
 
     def dispatch_match_command(self, match_id: str, command: MatchCommand) -> None:
         """
