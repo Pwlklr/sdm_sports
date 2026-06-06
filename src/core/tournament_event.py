@@ -1,11 +1,24 @@
-from __future__ import annotations
+from abc import ABC
+from typing import TYPE_CHECKING
 
-from src.core.domain_event import DomainEvent
+if TYPE_CHECKING:
+    from src.core.contestant import Contestant
+    from src.core.contest import Contest
 
-
-class TournamentEvent(DomainEvent):
-    """
-    Denotes events that affect the lifecycle of the tournament or a specific phase.
-    """
-
+class TournamentEvent(ABC):
+    """Base class for all tournament-level domain events."""
     pass
+
+class RegistrationOpened(TournamentEvent): 
+    pass
+
+class PlayerRegistered(TournamentEvent):
+    def __init__(self, contestant: 'Contestant') -> None:
+        self.contestant = contestant
+
+class RegistrationClosed(TournamentEvent): 
+    pass
+
+class MatchScheduled(TournamentEvent):
+    def __init__(self, match: 'Contest') -> None:
+        self.match = match

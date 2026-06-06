@@ -1,42 +1,38 @@
 from __future__ import annotations
-
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from src.core.observer import Observer, Subject
-
 if TYPE_CHECKING:
-    from src.core.contest import Contest
-    from src.core.ruleset import RuleSet
+    from src.core.contestant import Contestant
 
-
-class TournamentPhase(Observer):
+class DrawStrategy(ABC):
     """
-    Represents a specific stage of the tournament that organizes matches
-    according to assigned rules.
+    Strategy Pattern: Defines how contestants are matched up for a phase.
     """
+    @abstractmethod
+    def generate_draw(self, contestants: list[Contestant]) -> list[tuple[Contestant, Contestant]]:
+        pass
 
-    phase_id: str
-    ruleset: RuleSet
-    contests: list[Contest]
-    completed_contests: int
 
-    def __init__(
-        self,
-        phase_id: str,
-        ruleset: RuleSet,
-        contests: list[Contest] | None = None,
-    ) -> None:
-        self.phase_id = phase_id
-        self.ruleset = ruleset
-        self.contests = contests if contests is not None else []
-        self.completed_contests = 0
+class TournamentPhase(ABC):
+    """
+    Base class for a tournament phase (e.g., Group Stage, Knockout).
+    Delegates the matching logic to the injected DrawStrategy.
+    """
+    def __init__(self, name: str, draw_strategy: DrawStrategy) -> None:
+        self.name = name
+        self.draw_strategy = draw_strategy
+        self.is_completed: bool = False
 
-    def add_contest(self, contest: Contest) -> None:
-        self.contests.append(contest)
-        contest.attach(self)
+    def get_matchups(self, contestants: list[Contestant]) -> list[tuple[Contestant, Contestant]]:
+        """Delegates the bracket generation to the injected strategy."""
+        return self.draw_strategy.generate_draw(contestants)
 
-    def update(self, subject: Subject) -> None:
-        from src.core.contest import Contest
 
-        if isinstance(subject, Contest) and subject.current_state.is_final:
-            self.completed_contests += 1
+class TournamentPhaseFactory(ABC):
+    """
+    Factory Pattern: Creates tournament phases dynamically.
+    """
+    @abstractmethod
+    def create_phase(self, phase_name: str) -> TournamentPhase:
+        pass
