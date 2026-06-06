@@ -1,72 +1,118 @@
-from typing import ClassVar, cast
-from src.core.ruleset import RuleSet, Handler
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any
+
+from src.core.ruleset import RuleSet
 from src.core.contest_event import ContestEvent
 from src.core.contest_state import ContestState
-from src.sports.darts.state import DartsContestState
 from src.sports.darts.events import (
-    DartThrownEvent, ScoreBustedEvent, LegWonEvent, SetWonEvent, MatchEndedEvent
+    DartThrownEvent, ScoreBusted, TurnEnded, LegWon, SetWon, MatchEnded
 )
+from src.sports.darts.state import DartsContestState
+from src.sports.darts.disciplinary import BustViolation, BustPenalty
+
 
 class DartsRuleSet(RuleSet):
-    def _handle_dart_thrown(self, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
-        dart_event = cast(DartThrownEvent, event)
-        darts_state = cast(DartsContestState, state)
-        resulting_events: list[ContestEvent] = []
-        
-        if darts_state.is_completed:
-            return resulting_events 
+    """
+    Evaluates Darts events against the current state, enforcing rules
+    like Busts, Double-Out wins, and Turn limits. Returns cascading events.
+    """
 
-        player_id = dart_event.player_id
-        current_score = darts_state.current_scores.get(player_id)
-        if current_score is None:
-            return resulting_events 
+    # We type 'self' as the base RuleSet to perfectly match the base class signature,
+    # then assert it to DartsRuleSet inside the method.
+    def handle_dart_thrown(self: RuleSet, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
+        assert isinstance(event, DartThrownEvent)
+        assert isinstance(state, DartsContestState)
 
-        points_scored = dart_event.points
-        new_score = current_score - points_scored
-        darts_state.darts_thrown_this_turn += 1
+        new_events: list[ContestEvent] = []
 
-        # Rule 1: Bust Logic
-        if new_score < 0 or new_score == 1 or (new_score == 0 and dart_event.multiplier != 2):
-            # Domain Requirement: Revert score to what it was at the start of the turn
-            darts_state.current_scores[player_id] = darts_state.turn_start_scores[player_id]
-            darts_state.last_action_message = f"💥 BUST! {points_scored} scored, but busted. Turn passes."
-            resulting_events.append(ScoreBustedEvent(player_id=player_id, reason="Bust condition met."))
-            darts_state.switch_turn()
-        
-        # Rule 2: Winning Logic
-        elif new_score == 0 and dart_event.multiplier == 2:
-            darts_state.update_score(player_id, points_scored)
-            darts_state.last_action_message = f"🎯 LEG WON by {darts_state.active_player.name}!"
-            resulting_events.append(LegWonEvent(player_id=player_id))
-            darts_state.legs_won[player_id] += 1
+        if state.is_finished:
+            return new_events
+
+        # Ensure a turn is active
+        if state.current_turn is None:
+            state.start_new_turn()
+
+        # Tell MyPy that current_turn is definitively not None
+        current_turn = state.current_turn
+        assert current_turn is not None
+
+        player_id = state.current_player.id
+        player = state.current_player
+
+        # 1. Add the throw to the aggregate
+        current_turn.add_throw(event.dart_throw)
+
+        # 2. Calculate projected score
+        projected_score = state.turn_starting_score - current_turn.total_points
+
+        # 3. Rule: Bust Check
+        is_bust = False
+        if projected_score < 0 or projected_score == 1:
+            is_bust = True
+        elif projected_score == 0 and event.dart_throw.multiplier != 2:
+            is_bust = True
+
+        if is_bust:
+            # Trigger Disciplinary Pipeline
+            violation = BustViolation(player, "Score busted!")
+            penalty = BustPenalty(violation)
+            penalty.apply(current_turn)
             
-            if darts_state.legs_won[player_id] >= darts_state.config.legs_to_win_set:
-                resulting_events.append(SetWonEvent(player_id=player_id))
-                darts_state.sets_won[player_id] += 1
-                darts_state.last_action_message = f"🏆 SET WON by {darts_state.active_player.name}!"
+            # Revert score and pass turn
+            state.scores[player_id] = state.turn_starting_score
+            state.advance_player()
+            state.start_new_turn()
+            
+            # Cascade Events
+            new_events.append(ScoreBusted(player))
+            new_events.append(TurnEnded(player))
+            return new_events
+
+        # 4. Normal Throw: Update temporary score
+        state.scores[player_id] = projected_score
+
+        # 5. Rule: Win Leg Check
+        if projected_score == 0 and event.dart_throw.multiplier == 2:
+            state.legs_won[player_id] += 1
+            new_events.append(LegWon(player))
+            
+            # Check Set Win
+            if state.legs_won[player_id] >= state.legs_to_win_set:
+                state.sets_won[player_id] += 1
+                new_events.append(SetWon(player))
                 
-                if darts_state.sets_won[player_id] >= darts_state.config.sets_to_win_match:
-                    darts_state.is_completed = True
-                    darts_state.winner_id = player_id
-                    darts_state.last_action_message = f"🎉 MATCH WON by {darts_state.active_player.name}! 🎉"
-                    resulting_events.append(MatchEndedEvent(winner_id=player_id))
-                else:
-                    darts_state.reset_for_new_set()
-            else:
-                darts_state.reset_for_new_leg()
-        
-        # Rule 3: Valid Standard Throw
-        else:
-            darts_state.update_score(player_id, points_scored)
-            darts_state.last_action_message = f"Good dart! Scored {points_scored}. Remaining: {new_score}"
-            
-            # Switch turn if 3 darts have been thrown
-            if darts_state.darts_thrown_this_turn == 3:
-                darts_state.last_action_message += " | Turn Over."
-                darts_state.switch_turn()
+                # Reset legs for new set
+                for p in state.players:
+                    state.legs_won[p.id] = 0
+                
+                # Check Match Win
+                if state.sets_won[player_id] >= state.sets_to_win:
+                    state.is_finished = True
+                    new_events.append(MatchEnded(player))
+                    return new_events
 
-        return resulting_events
+            # Leg or Set won (but match not over), reset for next leg
+            state.reset_for_new_leg()
+            state.start_new_turn()
+            return new_events
 
-    handlers: ClassVar[dict[type[ContestEvent], Handler]] = {
-        DartThrownEvent: cast(Handler, _handle_dart_thrown)
+        # 6. Rule: Natural Turn End (3 darts thrown)
+        if current_turn.is_finished:
+            state.advance_player()
+            state.start_new_turn()
+            new_events.append(TurnEnded(player))
+
+        return new_events
+
+    # By omitting the explicit 'dict[...]' annotation here, we inherit the ClassVar 
+    # constraint from the base class seamlessly without triggering MyPy overriding errors.
+    handlers = {
+        DartThrownEvent: handle_dart_thrown
     }
+
+    def evaluate(self, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
+        """Dispatches the event to the appropriate handler and returns cascading events."""
+        handler = self.handlers.get(type(event))
+        if handler:
+            return handler(self, event, state)
+        return []

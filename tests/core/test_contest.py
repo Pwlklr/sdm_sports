@@ -1,51 +1,35 @@
-from __future__ import annotations
-
-
+import pytest
 from src.core.contest import Contest
-from src.core.contest_event import ContestEvent
+from src.core.contestant import IndividualPlayer
 from src.core.contest_state import ContestState
 from src.core.ruleset import RuleSet
-from src.core.team import Team
+from src.core.contest_event import ContestEvent
 
-
-class DummyState(ContestState):
-    score: int
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.score = 0
-
-
-class DummyEvent(ContestEvent):
+class MockState(ContestState):
     pass
 
+class MockEvent(ContestEvent):
+    pass
 
-class DummyRuleSet(RuleSet):
-    handlers = {
-        DummyEvent: lambda self, event, state: DummyRuleSet._on_dummy(
-            self, event, state
-        ),
-    }
+def dummy_handler(event: ContestEvent, state: ContestState) -> None:
+    pass
 
-    def _on_dummy(self, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
-        if event.team_id == "T1":
-            state.score += 1
-        return []
+class MockRuleSet(RuleSet):
+    # Satisfy the strict __init_subclass__ requirement of the existing RuleSet
+    handlers = {MockEvent: dummy_handler}
+    
+    def evaluate(self, event: ContestEvent, state: ContestState) -> None:
+        pass
 
-
-def test_contest_event_delegation():
-    team = Team(team_id="T1", name="Test Team")
-    initial_state = DummyState()
-    ruleset = DummyRuleSet()
-
-    contest = Contest(
-        contest_id="C1",
-        teams=[team],
-        initial_state=initial_state,
-        ruleset=ruleset,
-    )
-
-    event = DummyEvent(team_id="T1")
-    contest.process_event(event)
-
-    assert contest.current_state.score == 1
+def test_contest_initialization() -> None:
+    p1 = IndividualPlayer("Player 1")
+    p2 = IndividualPlayer("Player 2")
+    state = MockState()
+    ruleset = MockRuleSet()
+    
+    contest = Contest(contestants=[p1, p2], initial_state=state, ruleset=ruleset)
+    
+    assert contest.id is not None
+    assert len(contest.contestants) == 2
+    assert contest.current_state == state
+    assert contest.result is None

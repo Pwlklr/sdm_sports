@@ -1,103 +1,143 @@
 import sys
-import random
-from src.core.plugin import SportPlugin
-from src.core.contestant import Contestant
-from src.sports.darts.player import DartPlayer
-from src.sports.darts.plugin import DartsPlugin
+from src.core.engine import SportsSystemEngine
+from src.sports.darts.state import DartsContestState
+from src.sports.darts.ruleset import DartsRuleSet
+from src.core.contest import Contest
+from src.sports.darts.commands import StartDartsMatchCommand, ThrowDartCommand
+from src.console.darts_view import DartsConsoleView
 
-class TournamentEngine:
-    """A generic orchestrator to handle N-Players and tournament brackets."""
-    def __init__(self, plugin: SportPlugin):
-        self.plugin = plugin
-        self.players: list[Contestant] = []
+def print_menu() -> None:
+    print("\n=== SDM SPORTS SYSTEM ENGINE ===")
+    print("1. Register Global Player")
+    print("2. Start New Darts Match (Context: Darts)")
+    print("3. Resume Suspended Match")
+    print("4. View Registered Players")
+    print("5. Exit System")
+    print("==================================")
 
-    def register_players(self) -> None:
-        print(f"\n--- {self.plugin.name} Tournament Registration ---")
-        num_players = int(input("How many players are entering the tournament? (e.g., 4): ").strip() or "2")
+def match_loop(engine: SportsSystemEngine, match_id: str) -> None:
+    """The localized interactive loop for a specific match."""
+    match = engine.get_match(match_id)
+    if not match:
+        print("❌ Match not found in active memory!")
+        return
+
+    state = match.current_state
+    assert isinstance(state, DartsContestState)
+    
+    # Trigger a UI update in case we are resuming
+    match.notify()
+    
+    while not state.is_finished:
+        print("\nCommands: <sector> <multiplier> (e.g., '20 3') | '0 1' (Miss) | 'suspend' (Menu)")
+        cmd_input = input(">> Action: ").strip().lower()
         
-        for i in range(num_players):
-            name = input(f"Enter name for Player {i+1}: ").strip() or f"Player {i+1}"
-            self.players.append(DartPlayer(contestant_id=f"p{i+1}", name=name))
+        if cmd_input == 'suspend':
+            print("\n⏸️ Match Suspended. State safely cached. Returning to System Menu...")
+            break
             
-        print(f"\n✅ {len(self.players)} players registered!")
-
-    def generate_knockout_bracket(self) -> list[tuple[Contestant, Contestant]]:
-        """Shuffles players and pairs them up for a Knockout phase."""
-        random.shuffle(self.players)
-        bracket = []
-        for i in range(0, len(self.players), 2):
-            if i + 1 < len(self.players):
-                bracket.append((self.players[i], self.players[i+1]))
-            else:
-                print(f"⚠️ {self.players[i].name} gets a bye to the next round!")
-        return bracket
-
-    def play_match(self, p1: Contestant, p2: Contestant) -> Contestant:
-        print(f"\n🏆 NEXT MATCH: {p1.name} vs {p2.name} 🏆")
-        input("Press Enter to begin...")
-        
-        # Use the plugin to generate the domain match
-        # If we had a CricketPlugin, it would generate a Cricket match here!
-        contest = self.plugin.create_match([p1, p2])
-        if hasattr(contest, 'notify'): 
-            contest.notify()
-
-        while True:
-            if hasattr(contest.current_state, 'is_completed') and getattr(contest.current_state, 'is_completed'):
-                winner_id = getattr(contest.current_state, 'winner_id')
-                winner = p1 if p1.contestant_id == winner_id else p2
-                print(f"\n🎉 {winner.name} ADVANCES IN THE TOURNAMENT! 🎉")
-                return winner
-
-            user_input = input("\n>> Command: ").strip().lower()
-            if user_input == 'q':
-                print("Tournament Abandoned.")
-                sys.exit(0)
-            
-            command = self.plugin.parse_command(user_input, contest)
-            if command:
-                command.execute(contest)
-
-    def run(self) -> None:
-        self.register_players()
-        bracket = self.generate_knockout_bracket()
-        
-        print("\n--- TOURNAMENT BRACKET GENERATED ---")
-        for match in bracket:
-            print(f" - {match[0].name} vs {match[1].name}")
-            
-        winners = []
-        for match in bracket:
-            winner = self.play_match(match[0], match[1])
-            winners.append(winner)
-            
-        print("\n🏆 TOURNAMENT PHASE COMPLETE 🏆")
-        print("Advancing Players:", [w.name for w in winners])
-
-
-class SDMSportsApp:
-    def __init__(self) -> None:
-        self.plugins: list[SportPlugin] = [DartsPlugin()]
-
-    def run(self) -> None:
-        print("="*40)
-        print(" WELCOME TO SDM SPORTS TOURNAMENT CORE")
-        print("="*40)
-        
-        print("\nSelect Discipline:")
-        for idx, plugin in enumerate(self.plugins):
-            print(f"{idx + 1}. {plugin.name}")
-            
-        choice = input("\nEnter choice number: ").strip()
         try:
-            selected_plugin = self.plugins[int(choice) - 1]
-        except (ValueError, IndexError):
-            print("Invalid selection. Exiting.")
-            sys.exit(1)
+            parts = cmd_input.split()
+            if len(parts) != 2:
+                raise ValueError("Requires exactly two numbers separated by a space.")
+            
+            sector = int(parts[0])
+            multiplier = int(parts[1])
+            
+            # Dispatch the command through the Engine Facade
+            command = ThrowDartCommand(sector, multiplier)
+            engine.dispatch_match_command(match_id, command)
+            
+        except ValueError as e:
+            print(f"⚠️ Input Error: {e}")
+        except Exception as e:
+            print(f"⚠️ Domain Rule Rejected: {e}")
+            
+    if state.is_finished:
+        print("\n🎉 Match Complete! Returning to System Menu...")
 
-        engine = TournamentEngine(selected_plugin)
-        engine.run()
+
+def main() -> None:
+    # Initialize the core system facade
+    engine = SportsSystemEngine()
+    
+    # Pre-seed players for convenience
+    engine.create_individual_player("Luke Littler")
+    engine.create_individual_player("Phil Taylor")
+    
+    while True:
+        print_menu()
+        choice = input("Select operation: ").strip()
+        
+        if choice == '1':
+            name = input("Enter player name: ").strip()
+            p = engine.create_individual_player(name)
+            print(f"✅ Player '{p.name}' registered globally.")
+            
+        elif choice == '2':
+            players = list(engine.global_players.values())
+            if len(players) < 2:
+                print("❌ Insufficient players. Register at least 2 players first.")
+                continue
+            
+            print("\n--- Match Setup ---")
+            for i, p in enumerate(players):
+                print(f"[{i}] {p.name}")
+                
+            try:
+                p1_idx = int(input("Select Player 1 Index: ").strip())
+                p2_idx = int(input("Select Player 2 Index: ").strip())
+                p1 = players[p1_idx]
+                p2 = players[p2_idx]
+                
+                # Setup Darts-Specific Aggregates
+                state = DartsContestState([p1, p2], starting_score=301, sets_to_win=1, legs_to_win_set=1)
+                ruleset = DartsRuleSet()
+                match = Contest([p1, p2], state, ruleset)
+                
+                # Attach UI Observer
+                match.attach(DartsConsoleView())
+                
+                # Register to Engine
+                engine.register_active_match(match)
+                engine.dispatch_match_command(match.id, StartDartsMatchCommand())
+                
+                # Enter context
+                match_loop(engine, match.id)
+                
+            except (ValueError, IndexError):
+                print("❌ Invalid selection.")
+
+        elif choice == '3':
+            active = engine.active_matches
+            if not active:
+                print("❌ No matches currently suspended in memory.")
+                continue
+                
+            print("\n--- Suspended Matches ---")
+            match_ids = list(active.keys())
+            for i, mid in enumerate(match_ids):
+                m = active[mid]
+                desc = " vs ".join([p.name for p in m.contestants])
+                print(f"[{i}] {desc} (ID: {mid[:8]}...)")
+                
+            try:
+                m_idx = int(input("Select match to resume: ").strip())
+                match_loop(engine, match_ids[m_idx])
+            except (ValueError, IndexError):
+                print("❌ Invalid selection.")
+                
+        elif choice == '4':
+            print("\n--- Global Roster ---")
+            for p in engine.global_players.values():
+                print(f"- {p.name} (ID: {p.id})")
+                
+        elif choice == '5':
+            print("Shutting down SDM Sports Engine. Goodbye!")
+            sys.exit(0)
+            
+        else:
+            print("❌ Unknown command.")
 
 if __name__ == "__main__":
-    app = SDMSportsApp()
-    app.run()
+    main()

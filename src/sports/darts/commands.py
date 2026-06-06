@@ -1,23 +1,33 @@
 from src.core.commands import MatchCommand
 from src.core.contest import Contest
-from src.sports.darts.events import DartThrownEvent
+from src.sports.darts.events import DartThrownEvent, MatchStarted
+from src.sports.darts.entities import DartThrow
+from src.sports.darts.state import DartsContestState
+
+class StartDartsMatchCommand(MatchCommand):
+    """Initializes the match and triggers the opening lifecycle events."""
+    def execute(self, match: Contest) -> None:
+        state = match.current_state
+        assert isinstance(state, DartsContestState)
+        
+        if not state.is_finished and state.current_turn is None:
+            match.process_event(MatchStarted())
 
 class ThrowDartCommand(MatchCommand):
-    """
-    Translates a terminal intent into a domain action for Darts.
-    """
-    def __init__(self, player_id: str, sector: int, multiplier: int) -> None:
-        self.player_id = player_id
+    """Translates a user's throw input into a domain event."""
+    def __init__(self, sector: int, multiplier: int = 1) -> None:
         self.sector = sector
         self.multiplier = multiplier
 
-    def execute(self, contest: Contest) -> None:
-        """
-        Creates the DartThrownEvent and pushes it into the Contest's event pipeline.
-        """
-        event = DartThrownEvent(
-            player_id=self.player_id,
-            sector=self.sector,
-            multiplier=self.multiplier
-        )
-        contest.process_event(event)
+    def execute(self, match: Contest) -> None:
+        state = match.current_state
+        assert isinstance(state, DartsContestState)
+        
+        if state.is_finished:
+            return
+            
+        player = state.current_player
+        throw = DartThrow(self.sector, self.multiplier)
+        event = DartThrownEvent(player, throw)
+        
+        match.process_event(event)

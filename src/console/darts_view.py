@@ -1,29 +1,40 @@
-from src.core.observer import Observer, Subject
+from typing import Any
+from src.core.observer import Observer
 from src.core.contest import Contest
 from src.sports.darts.state import DartsContestState
 
-class DartsScoreboardObserver(Observer):
-    def update(self, subject: Subject) -> None:
-        if isinstance(subject, Contest) and isinstance(subject.current_state, DartsContestState):
-            state = subject.current_state
+class DartsConsoleView(Observer):
+    """
+    Observer Pattern: Reacts to state changes in the match and renders
+    the scoreboard to the console.
+    """
+    def update(self, subject: Any) -> None:
+        # Safely ensure we are observing a Darts match
+        if not isinstance(subject, Contest):
+            return
             
-            print("\n" + "="*45)
-            print(f"{'DARTS SCOREBOARD':^45}")
-            print("="*45)
+        state = subject.current_state
+        if not isinstance(state, DartsContestState):
+            return
             
-            for player in state.players:
-                score = state.current_scores.get(player.contestant_id, 0)
-                legs = state.legs_won.get(player.contestant_id, 0)
-                sets = state.sets_won.get(player.contestant_id, 0)
-                
-                marker = ">>" if state.active_player.contestant_id == player.contestant_id else "  "
-                print(f"{marker} {player.name:<15} | Score: {score:>3} | Legs: {legs} | Sets: {sets}")
-                
-            print("-" * 45)
-            print(f"Turn: {state.active_player.name} (Dart {state.darts_thrown_this_turn + 1} of 3)")
-            print(f"Status: {state.last_action_message}")
-            print("="*45)
+        print("\n" + "=" * 45)
+        print(" 🎯 DARTS SCOREBOARD ".center(45, "="))
+        
+        for p in state.players:
+            # Highlight current player
+            marker = ">>" if state.current_player == p and not state.is_finished else "  "
+            score = state.scores[p.id]
+            legs = state.legs_won[p.id]
+            sets = state.sets_won[p.id]
             
-            # Print command help only if game is still running
-            if not state.is_completed:
-                print("Commands: <sector> <multiplier> (e.g., '20 3' for Treble 20) | 'q' to quit match")
+            print(f"{marker} {p.name:<15} | Score: {score:>3} | Legs: {legs} | Sets: {sets}")
+            
+        print("-" * 45)
+        
+        if state.is_finished:
+            print("🏆 MATCH CONCLUDED 🏆".center(45))
+        elif state.current_turn:
+            dart_num = len(state.current_turn.throws) + 1
+            print(f"Turn: {state.current_player.name} (Dart {dart_num} of 3)")
+            
+        print("=" * 45)

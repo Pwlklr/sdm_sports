@@ -1,29 +1,51 @@
-from dataclasses import dataclass
+from __future__ import annotations
+from typing import TYPE_CHECKING
 from src.core.contest_event import ContestEvent
 
-@dataclass(frozen=True)
-class DartThrownEvent(ContestEvent):
-    player_id: str
-    sector: int
-    multiplier: int
+if TYPE_CHECKING:
+    from src.core.contestant import Contestant
+    from src.sports.darts.entities import DartThrow
 
-    @property
-    def points(self) -> int:
-        return self.sector * self.multiplier
+class DartsEvent(ContestEvent):
+    """Base class for all darts-specific domain events."""
+    pass
 
-@dataclass(frozen=True)
-class ScoreBustedEvent(ContestEvent):
-    player_id: str
-    reason: str
+class MatchStarted(DartsEvent): pass
+class SetStarted(DartsEvent): pass
+class LegStarted(DartsEvent): pass
 
-@dataclass(frozen=True)
-class LegWonEvent(ContestEvent):
-    player_id: str
+class TurnStarted(DartsEvent):
+    def __init__(self, player: Contestant) -> None:
+        super().__init__()
+        self.player = player
 
-@dataclass(frozen=True)
-class SetWonEvent(ContestEvent):
-    player_id: str
+class DartThrownEvent(DartsEvent):
+    def __init__(self, player: Contestant, dart_throw: DartThrow) -> None:
+        super().__init__()
+        self.player = player
+        self.dart_throw = dart_throw
 
-@dataclass(frozen=True)
-class MatchEndedEvent(ContestEvent):
-    winner_id: str
+class ScoreBusted(DartsEvent):
+    def __init__(self, player: Contestant) -> None:
+        super().__init__()
+        self.player = player
+
+class TurnEnded(DartsEvent):
+    def __init__(self, player: Contestant) -> None:
+        super().__init__()
+        self.player = player
+
+class LegWon(DartsEvent):
+    def __init__(self, player: Contestant) -> None:
+        super().__init__()
+        self.player = player
+
+class SetWon(DartsEvent):
+    def __init__(self, player: Contestant) -> None:
+        super().__init__()
+        self.player = player
+
+class MatchEnded(DartsEvent):
+    def __init__(self, winner: Contestant) -> None:
+        super().__init__()
+        self.winner = winner

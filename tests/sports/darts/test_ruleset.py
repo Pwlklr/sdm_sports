@@ -1,73 +1,82 @@
 import pytest
-from typing import List
-from src.core.contest_event import ContestEvent
-from src.sports.darts.player import DartPlayer
+from src.core.contestant import IndividualPlayer
 from src.sports.darts.state import DartsContestState
-from src.sports.darts.config import DartsMatchConfig
-from src.sports.darts.events import DartThrownEvent, ScoreBustedEvent, LegWonEvent
 from src.sports.darts.ruleset import DartsRuleSet
+from src.sports.darts.events import DartThrownEvent
+from src.sports.darts.entities import DartThrow
 
 @pytest.fixture
-def players() -> List[DartPlayer]:
-    return [
-        DartPlayer(contestant_id="p1", name="Luke Littler"),
-        DartPlayer(contestant_id="p2", name="Luke Humphries")
-    ]
+def match_setup() -> tuple[DartsContestState, DartsRuleSet, IndividualPlayer, IndividualPlayer]:
+    p1 = IndividualPlayer("Player 1", "p1")
+    p2 = IndividualPlayer("Player 2", "p2")
+    state = DartsContestState([p1, p2], starting_score=501, sets_to_win=1, legs_to_win_set=1)
+    ruleset = DartsRuleSet()
+    state.start_new_turn()
+    return state, ruleset, p1, p2
 
-@pytest.fixture
-def state(players: List[DartPlayer]) -> DartsContestState:
-    config = DartsMatchConfig(starting_score=501, legs_to_win_set=3, sets_to_win_match=2)
-    return DartsContestState(players=players, config=config)
+def test_normal_throw_progression(match_setup: tuple[DartsContestState, DartsRuleSet, IndividualPlayer, IndividualPlayer]) -> None:
+    state, ruleset, p1, p2 = match_setup
+    
+    # P1 throws a Treble 20 (60 points)
+    throw = DartThrow(20, 3)
+    event = DartThrownEvent(p1, throw)
+    
+    ruleset.evaluate(event, state)
+    
+    assert state.scores["p1"] == 441
+    assert state.current_player == p1 # Still P1's turn (1 dart thrown)
 
-@pytest.fixture
-def ruleset() -> DartsRuleSet:
-    return DartsRuleSet()
+def test_bust_rule_reverts_score(match_setup: tuple[DartsContestState, DartsRuleSet, IndividualPlayer, IndividualPlayer]) -> None:
+    state, ruleset, p1, p2 = match_setup
+    state.scores["p1"] = 50
+    state.turn_starting_score = 50
+    
+    # P1 hits Treble 20 (60 points) -> BUST
+    throw = DartThrow(20, 3)
+    event = DartThrownEvent(p1, throw)
+    
+    ruleset.evaluate(event, state)
+    
+    assert state.scores["p1"] == 50 # Score reverted
+    assert state.current_player == p2 # Turn passed to P2 automatically
 
-def test_valid_throw_updates_score(ruleset: DartsRuleSet, state: DartsContestState) -> None:
-    event = DartThrownEvent(player_id="p1", sector=20, multiplier=3) 
-    resulting_events = ruleset.evaluate(event, state)
-    assert state.current_scores["p1"] == 441
-    assert len(resulting_events) == 0
+def test_bust_on_single_one_remaining(match_setup: tuple[DartsContestState, DartsRuleSet, IndividualPlayer, IndividualPlayer]) -> None:
+    state, ruleset, p1, p2 = match_setup
+    state.scores["p1"] = 20
+    state.turn_starting_score = 20
+    
+    # P1 hits Single 19 (1 point remaining) -> BUST (cannot finish on 1)
+    throw = DartThrow(19, 1)
+    event = DartThrownEvent(p1, throw)
+    
+    ruleset.evaluate(event, state)
+    
+    assert state.scores["p1"] == 20 # Score reverted
 
-def test_bust_rule_score_below_zero(ruleset: DartsRuleSet, state: DartsContestState) -> None:
-    state.current_scores["p1"] = 50
-    state.turn_start_scores["p1"] = 50  # FIXED: Sync backup score
+def test_win_leg_double_out(match_setup: tuple[DartsContestState, DartsRuleSet, IndividualPlayer, IndividualPlayer]) -> None:
+    state, ruleset, p1, p2 = match_setup
+    state.scores["p1"] = 40
+    state.turn_starting_score = 40
     
-    event = DartThrownEvent(player_id="p1", sector=20, multiplier=3) 
-    resulting_events = ruleset.evaluate(event, state)
+    # P1 hits Double 20 (40 points) -> WIN
+    throw = DartThrow(20, 2)
+    event = DartThrownEvent(p1, throw)
     
-    assert len(resulting_events) == 1
-    assert isinstance(resulting_events[0], ScoreBustedEvent)
-    assert state.current_scores["p1"] == 50
+    ruleset.evaluate(event, state)
+    
+    assert state.is_finished is True
+    assert state.sets_won["p1"] == 1
 
-def test_bust_rule_score_leaves_one(ruleset: DartsRuleSet, state: DartsContestState) -> None:
-    state.current_scores["p1"] = 20
-    state.turn_start_scores["p1"] = 20  # FIXED: Sync backup score
+def test_bust_on_zero_without_double(match_setup: tuple[DartsContestState, DartsRuleSet, IndividualPlayer, IndividualPlayer]) -> None:
+    state, ruleset, p1, p2 = match_setup
+    state.scores["p1"] = 20
+    state.turn_starting_score = 20
     
-    event = DartThrownEvent(player_id="p1", sector=19, multiplier=1) 
-    resulting_events = ruleset.evaluate(event, state)
+    # P1 hits Single 20 (0 points, but not a double) -> BUST
+    throw = DartThrow(20, 1)
+    event = DartThrownEvent(p1, throw)
     
-    assert len(resulting_events) == 1
-    assert isinstance(resulting_events[0], ScoreBustedEvent)
-
-def test_leg_won_on_double(ruleset: DartsRuleSet, state: DartsContestState) -> None:
-    state.current_scores["p1"] = 40
-    state.turn_start_scores["p1"] = 40
+    ruleset.evaluate(event, state)
     
-    event = DartThrownEvent(player_id="p1", sector=20, multiplier=2) 
-    resulting_events = ruleset.evaluate(event, state)
-    
-    assert len(resulting_events) == 1
-    assert isinstance(resulting_events[0], LegWonEvent)
-    assert state.current_scores["p1"] == 501 
-
-def test_bust_rule_reaches_zero_without_double(ruleset: DartsRuleSet, state: DartsContestState) -> None:
-    state.current_scores["p1"] = 20
-    state.turn_start_scores["p1"] = 20 # FIXED: Sync backup score
-    
-    event = DartThrownEvent(player_id="p1", sector=20, multiplier=1) 
-    resulting_events = ruleset.evaluate(event, state)
-    
-    assert len(resulting_events) == 1
-    assert isinstance(resulting_events[0], ScoreBustedEvent)
-    assert state.current_scores["p1"] == 20
+    assert state.scores["p1"] == 20 # Reverted
+    assert state.current_player == p2
