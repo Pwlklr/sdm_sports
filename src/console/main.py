@@ -1,9 +1,10 @@
 import sys
-from typing import List
+from typing import List, cast
 from src.core.engine import SportsSystemEngine
 from src.sports.darts.state import DartsContestState
 from src.sports.darts.ruleset import DartsRuleSet
 from src.core.contest import Contest
+from src.core.contestant import Contestant, IndividualPlayer
 from src.sports.darts.commands import StartDartsMatchCommand, ThrowDartCommand, OcheFaultCommand
 from src.console.darts_view import DartsConsoleView
 
@@ -23,8 +24,8 @@ def match_loop(engine: SportsSystemEngine, match_id: str) -> None:
         print("❌ Match not found in active memory!")
         return
 
-    state = match.current_state
-    assert isinstance(state, DartsContestState)
+    # Strict type cast to access Darts-specific state properties
+    state = cast(DartsContestState, match.current_state)
     match.notify()
     
     while not state.is_completed:
@@ -64,7 +65,6 @@ def match_loop(engine: SportsSystemEngine, match_id: str) -> None:
         engine.archive_match(match_id)
         print("✅ Match archived successfully. Returning to System Menu...")
 
-
 def main() -> None:
     engine = SportsSystemEngine()
     
@@ -85,7 +85,7 @@ def main() -> None:
             print(f"✅ Player '{p.display_name}' registered globally.")
             
         elif choice == '2':
-            players = list(engine.global_players.values())
+            players: List[Contestant] = list(engine.global_players.values())
             if len(players) < 2:
                 print("❌ Insufficient players. Register at least 2 players first.")
                 continue
@@ -97,21 +97,23 @@ def main() -> None:
                     print("❌ Invalid number of players.")
                     continue
                 
-                selected_players = []
+                selected_players: List[Contestant] = []
                 for i in range(num_players):
                     print("\nAvailable Roster:")
-                    for idx, p in enumerate(players):
-                        if p not in selected_players:
-                            nick = getattr(p, "metadata", {}).get("nickname", "")
+                    for idx, pl in enumerate(players):
+                        if pl not in selected_players:
+                            nick = getattr(pl, "metadata", {}).get("nickname", "")
                             nick_str = f" '{nick}' " if nick else " "
-                            print(f"[{idx}] {p.name}{nick_str}(ID: {p.id[:8]})")
+                            print(f"[{idx}] {pl.name}{nick_str}(ID: {pl.id[:8]})")
                     
                     p_idx = int(input(f"Select Player {i + 1} Index: ").strip())
-                    selected_players.append(players[p_idx])
+                    
+                    # Strict Type Cast: Tell MyPy this Contestant is explicitly an IndividualPlayer
+                    selected_player = cast(IndividualPlayer, players[p_idx])
+                    selected_players.append(selected_player)
 
                 start_score = int(input("\nStarting Score (e.g., 301, 501, 701): ").strip())
                 
-                # X01 Warning Mechanism
                 if (start_score - 1) % 100 != 0:
                     print(f"\n⚠️ WARNING: {start_score} is not a standard X01 starting score (e.g., 301, 501).")
                     print("   Match will proceed, but please verify your tournament rules.")
@@ -158,9 +160,11 @@ def main() -> None:
                 
         elif choice == '4':
             print("\n--- Global Roster ---")
-            for p in engine.global_players.values():
-                nick = getattr(p, "metadata", {}).get("nickname", "N/A")
-                print(f"- {p.name} (Nickname: {nick}) | ID: {p.id[:8]}")
+            for player_base in engine.global_players.values():
+                # Strict Type Cast for the iteration
+                ind_player = cast(IndividualPlayer, player_base)
+                nick = getattr(ind_player, "metadata", {}).get("nickname", "N/A")
+                print(f"- {ind_player.name} (Nickname: {nick}) | ID: {ind_player.id[:8]}")
                 
         elif choice == '5':
             print("\n--- Match History (Archived) ---")
@@ -169,14 +173,17 @@ def main() -> None:
                 continue
                 
             for mid, m in engine.archived_matches.items():
-                state = m.current_state
-                if isinstance(state, DartsContestState):
-                    desc = " vs ".join([p.name for p in state.players])
-                    print(f"\nMatch: {desc} (ID: {mid[:8]})")
-                    print(f"Format: {state.starting_score} Up | Best of {state.sets_to_win} Sets")
-                    print("Final Scoreboard:")
-                    for p in state.players:
-                        print(f"  - {p.name}: {state.sets_won[p.id]} Sets, {state.legs_won[p.id]} Legs")
+                # Strict Type Cast for the archived state
+                archived_state = cast(DartsContestState, m.current_state)
+                desc = " vs ".join([pl.name for pl in archived_state.players])
+                print(f"\nMatch: {desc} (ID: {mid[:8]})")
+                print(f"Format: {archived_state.starting_score} Up | Best of {archived_state.sets_to_win} Sets")
+                print("Final Scoreboard:")
+                
+                for pl in archived_state.players:
+                    # Strict Type Cast for the internal loop
+                    pl_ind = cast(IndividualPlayer, pl)
+                    print(f"  - {pl_ind.name}: {archived_state.sets_won[pl_ind.id]} Sets, {archived_state.legs_won[pl_ind.id]} Legs")
             print("--------------------------------")
                 
         elif choice == '6':

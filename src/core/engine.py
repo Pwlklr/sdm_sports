@@ -1,3 +1,4 @@
+import uuid
 from typing import Dict, Optional
 
 from src.core.contestant import Contestant, IndividualPlayer, Team
@@ -29,9 +30,11 @@ class SportsSystemEngine:
         self.global_players[team.id] = team
         return team
 
-    def create_tournament(self, name: str) -> Tournament:
+    def create_tournament(self, name: str, tournament_id: Optional[str] = None) -> Tournament:
         """Creates and stores a new tournament aggregate."""
-        tournament = Tournament(name)
+        # Generate a unique ID if one is not provided to satisfy the Tournament signature
+        t_id = tournament_id or str(uuid.uuid4())
+        tournament = Tournament(name, t_id)
         self.tournaments[tournament.id] = tournament
         return tournament
 
