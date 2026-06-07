@@ -1,6 +1,6 @@
 from src.core.commands import MatchCommand
 from src.core.contest import Contest
-from src.sports.darts.events import DartThrownEvent, MatchStarted
+from src.sports.darts.events import DartThrownEvent, MatchStarted, OcheFaultEvent
 from src.sports.darts.entities import DartThrow
 from src.sports.darts.state import DartsContestState
 
@@ -10,7 +10,7 @@ class StartDartsMatchCommand(MatchCommand):
         state = match.current_state
         assert isinstance(state, DartsContestState)
         
-        if not state.is_finished and state.current_turn is None:
+        if not state.is_completed and state.current_turn is None:
             match.process_event(MatchStarted())
 
 class ThrowDartCommand(MatchCommand):
@@ -23,7 +23,7 @@ class ThrowDartCommand(MatchCommand):
         state = match.current_state
         assert isinstance(state, DartsContestState)
         
-        if state.is_finished:
+        if state.is_completed:
             return
             
         player = state.current_player
@@ -31,3 +31,15 @@ class ThrowDartCommand(MatchCommand):
         event = DartThrownEvent(player, throw)
         
         match.process_event(event)
+
+class OcheFaultCommand(MatchCommand):
+    """Translates a referee/player foul call into a domain event."""
+    def execute(self, match: Contest) -> None:
+        state = match.current_state
+        assert isinstance(state, DartsContestState)
+        
+        if state.is_completed:
+            return
+            
+        player = state.current_player
+        match.process_event(OcheFaultEvent(player))

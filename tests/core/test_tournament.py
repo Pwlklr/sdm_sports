@@ -1,12 +1,29 @@
 from __future__ import annotations
 
-
 from src.core.contest import Contest
 from src.core.contest_event import ContestEvent
 from src.core.contest_state import ContestState
 from src.core.ruleset import RuleSet
-from src.core.team import Team
-from src.core.tournament_phase import TournamentPhase
+from src.core.contestant import Contestant
+from src.core.tournament_phase import TournamentPhase, DrawStrategy
+
+
+class DummyContestant(Contestant):
+    def __init__(self, name: str, contestant_id: str) -> None:
+        self._name = name
+        self._id = contestant_id
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def id(self) -> str:
+        return self._id
+
+    @property
+    def display_name(self) -> str:
+        return self._name
 
 
 class DummyState(ContestState):
@@ -29,17 +46,26 @@ class DummyRuleSet(RuleSet):
     }
 
     def _on_dummy(self, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
-        if event.action_type == "END":
+        if getattr(event, "action_type", "") == "END":
             state.is_final = True
         return []
 
 
-def test_tournament_phase_observes_contest_completion():
-    team_a = Team(team_id="T1", name="Team A")
-    team_b = Team(team_id="T2", name="Team B")
+class DummyDrawStrategy(DrawStrategy):
+    def generate_draw(self, contestants: list[Contestant]) -> list[tuple[Contestant, Contestant]]:
+        return []
 
-    contest = Contest("C1", [team_a, team_b], DummyState(), DummyRuleSet())
-    phase = TournamentPhase("Phase-1", DummyRuleSet())
+
+class DummyPhase(TournamentPhase):
+    pass
+
+
+def test_tournament_phase_observes_contest_completion() -> None:
+    team_a = DummyContestant(name="Team A", contestant_id="T1")
+    team_b = DummyContestant(name="Team B", contestant_id="T2")
+
+    contest = Contest([team_a, team_b], DummyState(), DummyRuleSet(), contest_id="C1")
+    phase = DummyPhase("Phase-1", DummyDrawStrategy())
 
     phase.add_contest(contest)
 

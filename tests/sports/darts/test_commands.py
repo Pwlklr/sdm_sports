@@ -1,21 +1,48 @@
 import pytest
-from unittest.mock import MagicMock
+from typing import Any
 from src.core.contest import Contest
+from src.core.ruleset import RuleSet
+from src.core.contest_event import ContestEvent
+from src.core.contest_state import ContestState
 from src.sports.darts.commands import ThrowDartCommand
 from src.sports.darts.events import DartThrownEvent
+from src.sports.darts.state import DartsContestState
+from src.sports.darts.player import DartPlayer
+
+class SpyRuleSet(RuleSet):
+    """A minimal ruleset that just captures events for assertions."""
+    
+    def _dummy(self, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
+        return []
+
+    # Satisfies the strict metaclass enforcement in RuleSet.__init_subclass__
+    handlers: dict[Any, Any] = {
+        DartThrownEvent: _dummy
+    }
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.received_events: list[ContestEvent] = []
+
+    def evaluate(self, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
+        self.received_events.append(event)
+        return []
 
 def test_throw_dart_command_dispatches_event() -> None:
-    # Arrange: Mock the contest so we don't need real teams/states here
-    mock_contest = MagicMock(spec=Contest)
-    command = ThrowDartCommand(player_id="p1", sector=20, multiplier=3)
+    # Arrange: Use real objects to completely avoid Mock spec AttributeErrors
+    p1 = DartPlayer("p1", "Player 1")
+    state = DartsContestState(players=[p1], starting_score=501)
+    spy_ruleset = SpyRuleSet()
+    contest = Contest(contestants=[p1], initial_state=state, ruleset=spy_ruleset, contest_id="C1")
+    
+    command = ThrowDartCommand(sector=20, multiplier=3)
     
     # Act
-    command.execute(mock_contest)
+    command.execute(contest)
     
-    # Assert: Ensure process_event was called with the correct Domain Event
-    mock_contest.process_event.assert_called_once()
-    called_event = mock_contest.process_event.call_args[0][0]
+    # Assert
+    assert len(spy_ruleset.received_events) == 1
+    called_event = spy_ruleset.received_events[0]
     
     assert isinstance(called_event, DartThrownEvent)
-    assert called_event.player_id == "p1"
-    assert called_event.points == 60
+    assert called_event.dart_throw.points == 60

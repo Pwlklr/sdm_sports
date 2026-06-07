@@ -4,12 +4,7 @@ from src.core.contest import Contest
 from src.sports.darts.state import DartsContestState
 
 class DartsConsoleView(Observer):
-    """
-    Observer Pattern: Reacts to state changes in the match and renders
-    the scoreboard to the console.
-    """
     def update(self, subject: Any) -> None:
-        # Safely ensure we are observing a Darts match
         if not isinstance(subject, Contest):
             return
             
@@ -21,8 +16,7 @@ class DartsConsoleView(Observer):
         print(" 🎯 DARTS SCOREBOARD ".center(45, "="))
         
         for p in state.players:
-            # Highlight current player
-            marker = ">>" if state.current_player == p and not state.is_finished else "  "
+            marker = ">>" if state.current_player == p and not state.is_completed else "  "
             score = state.scores[p.id]
             legs = state.legs_won[p.id]
             sets = state.sets_won[p.id]
@@ -31,7 +25,7 @@ class DartsConsoleView(Observer):
             
         print("-" * 45)
         
-        if state.is_finished:
+        if state.is_completed:
             print("🏆 MATCH CONCLUDED 🏆".center(45))
         elif state.current_turn:
             dart_num = len(state.current_turn.throws) + 1

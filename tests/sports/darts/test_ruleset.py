@@ -64,7 +64,7 @@ def test_win_leg_double_out(match_setup: tuple[DartsContestState, DartsRuleSet, 
     
     ruleset.evaluate(event, state)
     
-    assert state.is_finished is True
+    assert state.is_completed is True
     assert state.sets_won["p1"] == 1
 
 def test_bust_on_zero_without_double(match_setup: tuple[DartsContestState, DartsRuleSet, IndividualPlayer, IndividualPlayer]) -> None:

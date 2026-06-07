@@ -1,18 +1,15 @@
-from typing import Dict, Optional
-from src.core.result import Result
+from abc import ABC, abstractmethod
+from typing import Optional
 from src.core.contestant import Contestant
 
-class DartsResult(Result):
+class Result(ABC):
     """
-    Stores the final outcome and statistics of a Darts match.
+    Base interface for the outcome of a Match/Contest.
     """
-    def __init__(self, winner: Optional[Contestant], sets_won: Dict[str, int], legs_won: Dict[str, int]) -> None:
-        self._winner = winner
-        self.sets_won = sets_won.copy()
-        self.legs_won = legs_won.copy()
-
+    @abstractmethod
     def is_finished(self) -> bool:
-        return self._winner is not None
+        pass
 
+    @abstractmethod
     def get_winner(self) -> Optional[Contestant]:
-        return self._winner
+        pass

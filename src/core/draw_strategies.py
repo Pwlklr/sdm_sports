@@ -1,28 +1,38 @@
-from __future__ import annotations
 import random
-from typing import TYPE_CHECKING
-
+from typing import List, Tuple
+from src.core.contestant import Contestant
 from src.core.tournament_phase import DrawStrategy
 
-if TYPE_CHECKING:
-    from src.core.contestant import Contestant
-
-class RandomKnockoutDrawStrategy(DrawStrategy):
+class RandomDrawStrategy(DrawStrategy):
     """
-    Randomly pairs contestants for a 1v1 knockout round.
-    Requires an even number of contestants.
+    Pairs contestants randomly for a knockout-style bracket.
+    If there is an odd number of contestants, the last one is ignored 
+    (a real system would grant a 'Bye', but this simplifies the matrix).
     """
-    
-    def generate_draw(self, contestants: list[Contestant]) -> list[tuple[Contestant, Contestant]]:
-        if len(contestants) % 2 != 0:
-            raise ValueError("Knockout draw requires an even number of contestants.")
-        
-        # Create a shallow copy to avoid mutating the original list
-        shuffled = contestants.copy()
-        random.shuffle(shuffled)
-        
-        matchups: list[tuple[Contestant, Contestant]] = []
-        for i in range(0, len(shuffled), 2):
-            matchups.append((shuffled[i], shuffled[i+1]))
+    def generate_draw(self, contestants: List[Contestant]) -> List[Tuple[Contestant, Contestant]]:
+        if len(contestants) < 2:
+            return []
             
+        pool = list(contestants)
+        random.shuffle(pool)
+        
+        matchups: List[Tuple[Contestant, Contestant]] = []
+        for i in range(0, len(pool) - 1, 2):
+            matchups.append((pool[i], pool[i+1]))
+            
+        return matchups
+
+
+class RoundRobinDrawStrategy(DrawStrategy):
+    """
+    Pairs every contestant with every other contestant exactly once 
+    for a Group Stage / League format.
+    """
+    def generate_draw(self, contestants: List[Contestant]) -> List[Tuple[Contestant, Contestant]]:
+        matchups: List[Tuple[Contestant, Contestant]] = []
+        
+        for i in range(len(contestants)):
+            for j in range(i + 1, len(contestants)):
+                matchups.append((contestants[i], contestants[j]))
+                
         return matchups

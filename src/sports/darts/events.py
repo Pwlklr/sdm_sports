@@ -25,6 +25,12 @@ class DartThrownEvent(DartsEvent):
         self.player = player
         self.dart_throw = dart_throw
 
+class OcheFaultEvent(DartsEvent):
+    """Event representing a player stepping over the throw line."""
+    def __init__(self, player: Contestant) -> None:
+        super().__init__()
+        self.player = player
+
 class ScoreBusted(DartsEvent):
     def __init__(self, player: Contestant) -> None:
         super().__init__()

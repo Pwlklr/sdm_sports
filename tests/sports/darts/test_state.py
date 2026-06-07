@@ -13,7 +13,7 @@ def test_state_initialization() -> None:
     assert state.scores["p1"] == 501
     assert state.scores["p2"] == 501
     assert state.current_turn is None
-    assert not state.is_finished
+    assert not state.is_completed
 
 def test_turn_lifecycle_and_player_advancement() -> None:
     p1 = IndividualPlayer("P1", "p1")
