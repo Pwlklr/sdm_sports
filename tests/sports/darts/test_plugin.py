@@ -1,38 +1,68 @@
 import pytest
+from unittest.mock import patch
 from src.sports.darts.plugin import DartsPlugin
-from src.sports.darts.player import DartPlayer
-from src.core.contest import Contest
-from src.sports.darts.commands import ThrowDartCommand
+from src.core.contestant import IndividualPlayer
+from src.sports.darts.commands import ThrowDartCommand, OcheFaultCommand, StartDartsMatchCommand
+from src.sports.darts.config import DartsMatchConfig
 
-def test_plugin_create_match():
+def test_plugin_name() -> None:
+    assert DartsPlugin().name == "Professional Darts (X01)"
+
+def test_plugin_get_start_command() -> None:
+    cmd = DartsPlugin().get_start_command()
+    assert isinstance(cmd, StartDartsMatchCommand)
+
+def test_plugin_get_input_prompt() -> None:
     plugin = DartsPlugin()
-    players = [DartPlayer("p1", "A"), DartPlayer("p2", "B")]
-    match = plugin.create_match(players)
+    p1 = IndividualPlayer("P1")
+    match = plugin.create_tournament_match([p1], DartsMatchConfig())
+    prompt = plugin.get_input_prompt(match)
+    assert "Action" in prompt
+    assert "sector" in prompt
+
+# Added two '1's to the end of the side effect to satisfy In/Out multipliers
+@patch('builtins.input', side_effect=['501', '1', '1', '1', '2'])
+def test_setup_tournament_config(mock_input: object) -> None:
+    plugin = DartsPlugin()
+    config = plugin.setup_tournament_config()
+    assert isinstance(config, DartsMatchConfig)
+    assert config.starting_score == 501
+    assert config.in_multiplier == 1
+    assert config.out_multiplier == 2
+
+def test_create_tournament_match() -> None:
+    plugin = DartsPlugin()
+    p1 = IndividualPlayer("P1")
+    p2 = IndividualPlayer("P2")
+    config = DartsMatchConfig(starting_score=301)
     
-    assert isinstance(match, Contest)
-    assert len(match.current_state.players) == 2
+    match = plugin.create_tournament_match([p1, p2], config)
+    assert match is not None
+    assert match.current_state.starting_score == 301
 
-def test_plugin_parse_valid_command():
+def test_plugin_parse_valid_command() -> None:
     plugin = DartsPlugin()
-    match = plugin.create_match([DartPlayer("p1", "A"), DartPlayer("p2", "B")])
+    p1 = IndividualPlayer("P1")
+    match = plugin.create_tournament_match([p1], DartsMatchConfig())
     
     cmd = plugin.parse_command("20 3", match)
     assert isinstance(cmd, ThrowDartCommand)
     assert cmd.sector == 20
     assert cmd.multiplier == 3
 
-def test_plugin_parse_invalid_commands():
-    plugin = DartsPlugin()
-    match = plugin.create_match([DartPlayer("p1", "A"), DartPlayer("p2", "B")])
-    
-    assert plugin.parse_command("100 1", match) is None  # Invalid sector
-    assert plugin.parse_command("20 5", match) is None   # Invalid multiplier
-    assert plugin.parse_command("50 3", match) is None   # Invalid treble bull
-    assert plugin.parse_command("invalid string", match) is None
+    cmd_miss = plugin.parse_command("0", match)
+    assert isinstance(cmd_miss, ThrowDartCommand)
+    assert cmd_miss.sector == 0
 
-def test_plugin_interactive_setup_fallback():
-    from src.sports.darts.plugin import DartsPlugin
+    cmd_fault = plugin.parse_command("fault", match)
+    assert isinstance(cmd_fault, OcheFaultCommand)
+
+def test_plugin_parse_invalid_commands() -> None:
     plugin = DartsPlugin()
-    match = plugin.interactive_setup()
-    assert match is not None
-    assert len(match.current_state.players) == 2
+    p1 = IndividualPlayer("P1")
+    match = plugin.create_tournament_match([p1], DartsMatchConfig())
+    
+    assert plugin.parse_command("invalid string", match) is None
+    assert plugin.parse_command("99 1", match) is None
+    assert plugin.parse_command("20 4", match) is None
+    assert plugin.parse_command("25 3", match) is None

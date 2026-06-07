@@ -16,7 +16,7 @@ from src.sports.darts.entities import DartThrow
 class DartsRuleSet(RuleSet):
     """
     Evaluates Darts events against the current state, enforcing rules
-    like Busts, Double-Out wins, and Turn limits.
+    like Busts, Double/Triple In-Out configs, and Turn limits.
     """
 
     def handle_oche_fault(self: RuleSet, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
@@ -69,14 +69,25 @@ class DartsRuleSet(RuleSet):
         player_id = state.current_player.id
         player = state.current_player
 
+        # 1. Add physical throw to turn aggregate
         current_turn.add_throw(event.dart_throw)
-        projected_score = state.turn_starting_score - current_turn.total_points
 
-        # Bust Check
+        # 2. Evaluate In-Multiplier rules
+        pts_scored = event.dart_throw.points
+        if state.scores[player_id] == state.starting_score:
+            # If >1 (e.g., Double In), it MUST be exactly the required multiplier
+            if state.in_multiplier > 1 and event.dart_throw.multiplier != state.in_multiplier:
+                pts_scored = 0
+
+        projected_score = state.scores[player_id] - pts_scored
+
+        # 3. Rule: Bust Check (Using flexible out-multipliers)
         is_bust = False
-        if projected_score < 0 or projected_score == 1:
+        if projected_score < 0:
             is_bust = True
-        elif projected_score == 0 and event.dart_throw.multiplier != 2:
+        elif projected_score == 0 and state.out_multiplier > 1 and event.dart_throw.multiplier != state.out_multiplier:
+            is_bust = True
+        elif projected_score > 0 and state.out_multiplier > 1 and projected_score < state.out_multiplier:
             is_bust = True
 
         if is_bust:
@@ -92,10 +103,11 @@ class DartsRuleSet(RuleSet):
             new_events.append(TurnEnded(player))
             return new_events
 
+        # 4. Normal Throw: Safe state transition
         state.scores[player_id] = projected_score
 
-        # Win Leg Check
-        if projected_score == 0 and event.dart_throw.multiplier == 2:
+        # 5. Rule: Win Leg Check
+        if projected_score == 0:
             state.legs_won[player_id] += 1
             new_events.append(LegWon(player))
             
@@ -115,7 +127,7 @@ class DartsRuleSet(RuleSet):
             state.start_new_turn()
             return new_events
 
-        # Natural Turn End Check
+        # 6. Natural Turn End Check
         if current_turn.is_finished:
             state.advance_player()
             state.start_new_turn()
