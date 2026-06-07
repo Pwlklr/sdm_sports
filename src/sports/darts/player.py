@@ -1,10 +1,10 @@
-from src.core.contestant import Contestant
+from src.core.contestant import IndividualPlayer
 
-class DartPlayer(Contestant):
+class DartPlayer(IndividualPlayer):
     """Represents a single darts player in a contest."""
     
     def __init__(self, contestant_id: str, name: str) -> None:
-        super().__init__(contestant_id=contestant_id, name=name)
+        super().__init__(name=name, contestant_id=contestant_id)
 
     def __str__(self) -> str:
         return self.name
