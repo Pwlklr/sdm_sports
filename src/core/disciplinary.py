@@ -23,6 +23,7 @@ class Violation(ABC):
         return f"Violation by {self.violator.display_name}: {self.reason}"
 
 
+# TODO: Zmienic na contestantstate
 class Penalty(ABC):
     """
     Enforces the consequences of a Violation by mutating the ContestState.

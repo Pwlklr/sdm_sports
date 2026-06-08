@@ -1,9 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
 
 from src.core.ruleset import RuleSet
 from src.core.contest_event import ContestEvent
-from src.core.contest_state import ContestState
 from src.sports.darts.events import (
     DartThrownEvent, ScoreBusted, TurnEnded, LegWon, SetWon, MatchEnded, OcheFaultEvent
 )
@@ -19,10 +17,7 @@ class DartsRuleSet(RuleSet):
     like Busts, Double/Triple In-Out configs, and Turn limits.
     """
 
-    def handle_oche_fault(self: RuleSet, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
-        assert isinstance(event, OcheFaultEvent)
-        assert isinstance(state, DartsContestState)
-
+    def handle_oche_fault(self, event: OcheFaultEvent, state: DartsContestState) -> list[ContestEvent]:
         new_events: list[ContestEvent] = []
 
         if state.is_completed:
@@ -51,10 +46,7 @@ class DartsRuleSet(RuleSet):
 
         return new_events
 
-    def handle_dart_thrown(self: RuleSet, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
-        assert isinstance(event, DartThrownEvent)
-        assert isinstance(state, DartsContestState)
-
+    def handle_dart_thrown(self, event: DartThrownEvent, state: DartsContestState) -> list[ContestEvent]:
         new_events: list[ContestEvent] = []
 
         if state.is_completed:
@@ -139,9 +131,3 @@ class DartsRuleSet(RuleSet):
         DartThrownEvent: handle_dart_thrown,
         OcheFaultEvent: handle_oche_fault
     }
-
-    def evaluate(self, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
-        handler = self.handlers.get(type(event))
-        if handler:
-            return handler(self, event, state)
-        return []

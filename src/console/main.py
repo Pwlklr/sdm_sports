@@ -11,6 +11,8 @@ from src.core.draw_strategies import RandomDrawStrategy, RoundRobinDrawStrategy
 # Bootstrap Plugin Registration (The ONLY place specific sports are loaded)
 from src.sports.darts.plugin import DartsPlugin
 from src.sports.darts.state import DartsContestState
+from src.sports.football.plugin import FootballPlugin
+from src.sports.football.state import FootballContestState
 
 def print_menu() -> None:
     print("\n=== SDM SPORTS SYSTEM ENGINE ===")
@@ -109,6 +111,7 @@ def select_players(engine: SportsSystemEngine, min_players: int = 2) -> List[Con
 def main() -> None:
     engine = SportsSystemEngine()
     engine.register_plugin(DartsPlugin())
+    engine.register_plugin(FootballPlugin())
     
     engine.create_individual_player("Luke Littler", metadata={"nickname": "The Nuke"})
     engine.create_individual_player("Phil Taylor", metadata={"nickname": "The Power"})
@@ -211,7 +214,11 @@ def main() -> None:
                 
             try:
                 m_idx = int(input("Select match to resume: ").strip())
-                engine.get_match(match_ids[m_idx]).notify() 
+                resumed = engine.get_match(match_ids[m_idx])
+                if resumed is None:
+                    print("❌ Invalid selection.")
+                    continue
+                resumed.notify()
                 match_loop(engine, match_ids[m_idx], engine.get_available_plugins()[0])
             except (ValueError, IndexError, AttributeError):
                 print("❌ Invalid selection.")
@@ -230,15 +237,26 @@ def main() -> None:
                 continue
                 
             for mid, m in engine.archived_matches.items():
-                archived_state = cast(DartsContestState, m.current_state)
-                desc = " vs ".join([pl.name for pl in archived_state.players])
-                print(f"\nMatch: {desc} (ID: {mid[:8]})")
-                print(f"Format: {archived_state.starting_score} Up | Best of {archived_state.sets_to_win} Sets")
-                print("Final Scoreboard:")
-                
-                for pl in archived_state.players:
-                    pl_ind = cast(IndividualPlayer, pl)
-                    print(f"  - {pl_ind.name}: {archived_state.sets_won[pl_ind.id]} Sets, {archived_state.legs_won[pl_ind.id]} Legs")
+                state = m.current_state
+                if isinstance(state, DartsContestState):
+                    desc = " vs ".join([pl.name for pl in state.players])
+                    print(f"\nMatch: {desc} (ID: {mid[:8]})")
+                    print(f"Format: {state.starting_score} Up | Best of {state.sets_to_win} Sets")
+                    print("Final Scoreboard:")
+                    for pl in state.players:
+                        print(f"  - {pl.name}: {state.sets_won[pl.id]} Sets, {state.legs_won[pl.id]} Legs")
+                elif isinstance(state, FootballContestState):
+                    desc = " vs ".join([t.name for t in state.teams])
+                    print(f"\nMatch: {desc} (ID: {mid[:8]})")
+                    via = state.decided_by.replace("_", " ")
+                    outcome = "Draw" if state.was_draw else f"{state.winner.name if state.winner else '?'} ({via})"
+                    print(f"Result: {outcome}")
+                    print("Final Score:")
+                    for t in state.teams:
+                        print(f"  - {t.name}: {state.scores[t.id]} goals")
+                else:
+                    desc = " vs ".join([c.name for c in m.contestants])
+                    print(f"\nMatch: {desc} (ID: {mid[:8]})")
             print("--------------------------------")
                 
         elif choice == '7':

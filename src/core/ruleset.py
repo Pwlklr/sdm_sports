@@ -4,8 +4,6 @@ from abc import ABC
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 
-from src.core.exceptions import UnsupportedContestEvent
-
 if TYPE_CHECKING:
     from src.core.contest_event import ContestEvent
     from src.core.contest_state import ContestState
@@ -28,14 +26,10 @@ class RuleSet(ABC):
             raise TypeError(f"{cls.__name__} must define a non-empty handlers dict")
 
     def evaluate(self, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
-        try:
-            handler = self.handlers[type(event)]
-        except KeyError:
-            raise UnsupportedContestEvent(type(event).__name__) from None
-        return handler(self, event, state)
+        handler = self.handlers.get(type(event))
+        if handler:
+            return handler(self, event, state)
+        return []
 
 
-Handler: TypeAlias = Callable[
-    ["RuleSet", "ContestEvent", "ContestState"],
-    list["ContestEvent"],
-]
+Handler: TypeAlias = Callable[..., list["ContestEvent"]]
