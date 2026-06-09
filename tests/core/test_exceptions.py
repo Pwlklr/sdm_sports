@@ -1,5 +1,5 @@
 import pytest
-from src.core.exceptions import UnsupportedContestEvent
+from src.core.shared.unsupported_contest_event import UnsupportedContestEvent
 
 
 def test_unsupported_contest_event_exception():

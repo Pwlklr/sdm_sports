@@ -1,18 +1,28 @@
 import sys
-from typing import List, cast
-from src.core.engine import SportsSystemEngine
-from src.core.contestant import Contestant, IndividualPlayer
-from src.core.plugin import SportPlugin
+from typing import List
 
-# Tournament Rules Setup
-from src.core.tournament_phase import TournamentPhase, KnockoutPhase, GroupPhase
-from src.core.draw_strategies import RandomDrawStrategy, RoundRobinDrawStrategy
+from src.core.contest import Contest
+from src.core.sport.console_adapter import ConsoleAdapter
+from src.core.sport.match_setup import create_console_contest
+from src.core.sport.registered_sport import RegisteredSport
+from src.core.contestant import Contestant, IndividualPlayer, Team
+from src.core.system.sports_system_engine import SportsSystemEngine
+from src.core.tournament import Tournament
+from src.core.tournament.phase import (
+    GroupStagePhase,
+    KnockoutPhase,
+    TournamentPhase,
+)
+from src.core.tournament.draw import RandomDrawStrategy, RoundRobinDrawStrategy
+from src.sports.darts.descriptor import DARTS_SPORT
+from src.sports.darts.darts_sport_factory import DartsSportFactory
+from src.sports.darts.adapter import DartsConsoleAdapter
+from src.sports.darts.contest.darts_contest_state import DartsContestState
+from src.sports.football.descriptor import FOOTBALL_SPORT
+from src.sports.football.football_sport_factory import FootballSportFactory
+from src.sports.football.adapter import FootballConsoleAdapter
+from src.sports.football.contest.state import FootballContestState
 
-# Bootstrap Plugin Registration (The ONLY place specific sports are loaded)
-from src.sports.darts.plugin import DartsPlugin
-from src.sports.darts.state import DartsContestState
-from src.sports.football.plugin import FootballPlugin
-from src.sports.football.state import FootballContestState
 
 def print_menu() -> None:
     print("\n=== SDM SPORTS SYSTEM ENGINE ===")
@@ -25,39 +35,51 @@ def print_menu() -> None:
     print("7. Exit System")
     print("==================================")
 
-def select_plugin(engine: SportsSystemEngine) -> SportPlugin:
-    plugins = engine.get_available_plugins()
-    if not plugins:
-        print("❌ No sport plugins registered.")
+
+def sport_id_for_match(match: Contest) -> str:
+    state = match.current_state
+    if isinstance(state, DartsContestState):
+        return DARTS_SPORT.id
+    if isinstance(state, FootballContestState):
+        return FOOTBALL_SPORT.id
+    raise ValueError("Cannot determine sport for this match.")
+
+
+def select_sport(engine: SportsSystemEngine) -> RegisteredSport:
+    sports = engine.get_available_sports()
+    if not sports:
+        print("❌ No sports registered.")
         sys.exit(1)
-        
+
     print("\nSelect Discipline:")
-    for i, p in enumerate(plugins):
-        print(f"{i + 1}. {p.name}")
-        
+    for i, sport in enumerate(sports):
+        print(f"{i + 1}. {sport.descriptor.display_name}")
+
     try:
         choice = int(input("Choice: ").strip()) - 1
-        return plugins[choice]
+        return sports[choice]
     except (ValueError, IndexError):
-        print("⚠️ Invalid choice, defaulting to first plugin.")
-        return plugins[0]
+        print("⚠️ Invalid choice, defaulting to first sport.")
+        return sports[0]
 
-def match_loop(engine: SportsSystemEngine, match_id: str, plugin: SportPlugin) -> None:
-    """A completely generic match loop delegated to the injected Plugin."""
+
+def match_loop(
+    engine: SportsSystemEngine, match_id: str, adapter: ConsoleAdapter
+) -> None:
     match = engine.get_match(match_id)
     if not match:
         print("❌ Match not found in active memory!")
         return
 
     while not match.current_state.is_completed:
-        prompt_text = plugin.get_input_prompt(match)
+        prompt_text = adapter.get_input_prompt(match)
         cmd_input = input(f">> {prompt_text}: ").strip().lower()
-        
-        if cmd_input == 'suspend':
+
+        if cmd_input == "suspend":
             print("\n⏸️ Match Suspended. State safely cached.")
             break
-            
-        command = plugin.parse_command(cmd_input, match)
+
+        command = adapter.parse_command(cmd_input, match)
         if command:
             try:
                 engine.dispatch_match_command(match_id, command)
@@ -65,24 +87,59 @@ def match_loop(engine: SportsSystemEngine, match_id: str, plugin: SportPlugin) -
                 print(f"⚠️ System Error: {e}")
             except Exception as e:
                 print(f"⚠️ Domain Rule Rejected: {e}")
-            
+
     if match.current_state.is_completed:
         print("\n🎉 Match Complete!")
-        engine.archive_match(match_id)
 
-def select_players(engine: SportsSystemEngine, min_players: int = 2) -> List[Contestant]:
-    players: List[Contestant] = list(engine.global_players.values())
+
+def setup_demo_roster(engine: SportsSystemEngine) -> None:
+    for name, nick in [
+        ("Luke Littler", "The Nuke"),
+        ("Phil Taylor", "The Power"),
+        ("Michael van Gerwen", "MvG"),
+        ("Gerwyn Price", "The Iceman"),
+    ]:
+        engine.create_individual_player(name, metadata={"nickname": nick})
+
+    engine.create_team_with_roster(
+        "Arsenal FC",
+        ["Raya", "Saliba", "Odegaard", "Saka", "Havertz"],
+    )
+    engine.create_team_with_roster(
+        "Manchester City",
+        ["Ederson", "Rodri", "De Bruyne", "Foden", "Haaland"],
+    )
+    engine.create_team_with_roster(
+        "Liverpool FC",
+        ["Alisson", "Van Dijk", "Salah", "Mac Allister", "Nunez"],
+    )
+    engine.create_team_with_roster(
+        "Chelsea FC",
+        ["Sanchez", "James", "Caicedo", "Palmer", "Jackson"],
+    )
+
+
+def select_players(
+    engine: SportsSystemEngine, min_players: int = 2
+) -> List[IndividualPlayer]:
+    players = engine.list_individual_players()
     if len(players) < min_players:
-        print(f"❌ Insufficient players. Register at least {min_players} players first.")
+        print(
+            f"❌ Insufficient players. Register at least {min_players} players first."
+        )
         return []
-    
+
     try:
-        num_players = int(input(f"How many players? (min {min_players}, max {len(players)}): ").strip())
+        num_players = int(
+            input(
+                f"How many players? (min {min_players}, max {len(players)}): "
+            ).strip()
+        )
         if num_players < min_players or num_players > len(players):
             print("❌ Invalid number of players.")
             return []
-            
-        selected_players: List[Contestant] = []
+
+        selected_players: List[IndividualPlayer] = []
         while len(selected_players) < num_players:
             print("\nAvailable Roster:")
             for idx, pl in enumerate(players):
@@ -90,166 +147,280 @@ def select_players(engine: SportsSystemEngine, min_players: int = 2) -> List[Con
                     nick = getattr(pl, "metadata", {}).get("nickname", "")
                     nick_str = f" '{nick}' " if nick else " "
                     print(f"[{idx}] {pl.name}{nick_str}(ID: {pl.id[:8]})")
-            
-            p_idx = int(input(f"Select Player {len(selected_players) + 1} Index: ").strip())
+
+            p_idx = int(
+                input(f"Select Player {len(selected_players) + 1} Index: ").strip()
+            )
             if p_idx < 0 or p_idx >= len(players):
                 print("❌ Invalid selection. Try again.")
                 continue
-                
-            selected_player = cast(IndividualPlayer, players[p_idx])
+
+            selected_player = players[p_idx]
             if selected_player in selected_players:
                 print("❌ Player already selected! Choose a different unique player.")
                 continue
-                
+
             selected_players.append(selected_player)
-            
+
         return selected_players
     except (ValueError, IndexError):
         print("❌ Invalid input.")
         return []
 
+
+def select_teams(engine: SportsSystemEngine, team_count: int = 2) -> List[Team]:
+    teams = engine.list_teams()
+    if len(teams) < team_count:
+        print(
+            f"❌ Need at least {team_count} registered teams "
+            f"(only {len(teams)} available)."
+        )
+        return []
+
+    selected_teams: List[Team] = []
+    while len(selected_teams) < team_count:
+        print(f"\nSelect team {len(selected_teams) + 1} of {team_count}:")
+        for idx, team in enumerate(teams):
+            if team in selected_teams:
+                continue
+            roster = ", ".join(
+                f"{n}. {p.name}" for n, p in enumerate(team.roster, start=1)
+            ) or "(empty squad)"
+            print(f"[{idx}] {team.name} — {roster}")
+
+        try:
+            t_idx = int(input("Team index: ").strip())
+        except ValueError:
+            print("❌ Invalid input.")
+            return []
+
+        if t_idx < 0 or t_idx >= len(teams):
+            print("❌ Invalid selection. Try again.")
+            continue
+
+        team = teams[t_idx]
+        if team in selected_teams:
+            print("❌ Team already selected.")
+            continue
+
+        selected_teams.append(team)
+
+    return selected_teams
+
+
+def select_contestants(
+    engine: SportsSystemEngine, sport: RegisteredSport, *, for_tournament: bool
+) -> List[Contestant]:
+    if sport.descriptor.id == FOOTBALL_SPORT.id:
+        min_teams = 3 if for_tournament else 2
+        return select_teams(engine, team_count=min_teams)
+    min_players = 3 if for_tournament else 2
+    return select_players(engine, min_players=min_players)
+
+
+def run_tournament_matches(
+    engine: SportsSystemEngine,
+    tournament: Tournament,
+    adapter: ConsoleAdapter,
+) -> None:
+    phase = tournament.current_phase
+    if phase is None:
+        print("❌ Tournament has no active phase.")
+        return
+
+    total = len(phase.contests)
+    for i, match in enumerate(phase.contests):
+        sides = " vs ".join(c.name for c in match.contestants)
+        print("\n==============================================")
+        print(f" 🎯 TOURNAMENT MATCH {i + 1} OF {total}")
+        print(f" UP NEXT: {sides}")
+        print("==============================================")
+        input("Press Enter to begin match...")
+
+        engine.register_active_match(match)
+        adapter.attach_view(match)
+        start_cmd = adapter.get_start_command()
+        if start_cmd:
+            engine.dispatch_match_command(match.id, start_cmd)
+
+        match_loop(engine, match.id, adapter)
+
+        if not match.current_state.is_completed:
+            print(f"\n⏸️ Tournament '{tournament.name}' paused. Return to menu.")
+            return
+
+        engine.complete_tournament_match(tournament, match.id)
+        engine.archive_match(match.id)
+
+
 def main() -> None:
     engine = SportsSystemEngine()
-    engine.register_plugin(DartsPlugin())
-    engine.register_plugin(FootballPlugin())
-    
-    engine.create_individual_player("Luke Littler", metadata={"nickname": "The Nuke"})
-    engine.create_individual_player("Phil Taylor", metadata={"nickname": "The Power"})
-    engine.create_individual_player("Michael van Gerwen", metadata={"nickname": "MvG"})
-    engine.create_individual_player("Gerwyn Price", metadata={"nickname": "The Iceman"})
-    
+    engine.register_sport(DARTS_SPORT, DartsSportFactory(), DartsConsoleAdapter())
+    engine.register_sport(
+        FOOTBALL_SPORT, FootballSportFactory(), FootballConsoleAdapter()
+    )
+
+    setup_demo_roster(engine)
+
     while True:
         print_menu()
         choice = input("Select operation: ").strip()
-        
-        if choice == '1':
+
+        if choice == "1":
             name = input("Enter player name: ").strip()
             nickname = input("Enter nickname (optional): ").strip()
             metadata = {"nickname": nickname} if nickname else {}
             p = engine.create_individual_player(name, metadata=metadata)
             print(f"✅ Player '{p.display_name}' registered globally.")
-            
-        elif choice == '2':
-            plugin = select_plugin(engine)
-            print(f"\n--- {plugin.name} Exhibition Setup ---")
-            
-            selected_players = select_players(engine, min_players=2)
-            if not selected_players: continue
-                
-            match = plugin.setup_exhibition_match(selected_players)
-            if not match: continue
-                
+
+        elif choice == "2":
+            sport = select_sport(engine)
+            print(f"\n--- {sport.descriptor.display_name} Exhibition Setup ---")
+
+            selected = select_contestants(engine, sport, for_tournament=False)
+            if not selected:
+                continue
+
+            try:
+                config = sport.adapter.collect_config()
+                match = create_console_contest(
+                    sport.factory, sport.adapter, selected, config
+                )
+            except ValueError as e:
+                print(f"❌ {e}")
+                continue
+
             engine.register_active_match(match)
-            start_cmd = plugin.get_start_command()
+            start_cmd = sport.adapter.get_start_command()
             if start_cmd:
                 engine.dispatch_match_command(match.id, start_cmd)
-            
-            match_loop(engine, match.id, plugin)
 
-        elif choice == '3':
-            plugin = select_plugin(engine)
-            print(f"\n--- {plugin.name} Tournament Setup ---")
-            
+            match_loop(engine, match.id, sport.adapter)
+
+        elif choice == "3":
+            sport = select_sport(engine)
+            print(f"\n--- {sport.descriptor.display_name} Tournament Setup ---")
+
             t_name = input("Enter Tournament Name: ").strip()
-            selected_players = select_players(engine, min_players=3)
-            if not selected_players: continue
-                
+            selected = select_contestants(engine, sport, for_tournament=True)
+            if not selected:
+                continue
+
             print("\nSelect Tournament Format:")
             print("1. Knockout Bracket (Random Draw)")
             print("2. Group Stage (Round Robin)")
             format_choice = input("Choice: ").strip()
-            
-            config = plugin.setup_tournament_config()
+
+            try:
+                config = sport.adapter.collect_config()
+            except ValueError:
+                print("❌ Invalid tournament config.")
+                continue
+
             tournament = engine.create_tournament(t_name)
-            for pl in selected_players:
-                tournament.register_contestant(pl)
-            
-            # Inline ternary initialization cleanly satisfies variable type limits
-            phase: TournamentPhase = KnockoutPhase("Playoffs", RandomDrawStrategy()) if format_choice == '1' else GroupPhase("Group Stage", RoundRobinDrawStrategy())
-            
+
+            phase: TournamentPhase = (
+                KnockoutPhase("Playoffs", RandomDrawStrategy())
+                if format_choice == "1"
+                else GroupStagePhase("Group Stage", RoundRobinDrawStrategy())
+            )
             tournament.add_phase(phase)
-            matchups = phase.get_matchups(selected_players)
-            
+
+            scheduled = engine.setup_tournament(
+                tournament, sport.factory, config, selected
+            )
+
             print(f"\n🏆 --- {t_name.upper()} BRACKET GENERATED --- 🏆")
-            for i, (p1, p2) in enumerate(matchups):
-                print(f" Match {i+1}: {p1.name} vs {p2.name}")
-            
-            for i, (p1, p2) in enumerate(matchups):
-                print(f"\n==============================================")
-                print(f" 🎯 TOURNAMENT MATCH {i+1} OF {len(matchups)}")
-                print(f" UP NEXT: {p1.name} vs {p2.name}")
-                print(f"==============================================")
-                input("Press Enter to begin match...")
-                
-                match = plugin.create_tournament_match([p1, p2], config)
-                engine.register_active_match(match)
-                phase.add_contest(match)
-                
-                start_cmd = plugin.get_start_command()
-                if start_cmd:
-                    engine.dispatch_match_command(match.id, start_cmd)
-                
-                match_loop(engine, match.id, plugin)
-                
-                if not match.current_state.is_completed:
-                    print(f"\n⏸️ Tournament '{tournament.name}' paused. Return to menu.")
-                    break
-                    
-            tournament.advance_phase()
+            for i, event in enumerate(scheduled):
+                sides = " vs ".join(c.name for c in event.match.contestants)
+                print(f" Match {i + 1}: {sides}")
+
+            run_tournament_matches(engine, tournament, sport.adapter)
+
             if tournament.is_completed:
                 print(f"\n🎊 TOURNAMENT '{tournament.name}' HAS CONCLUDED! 🎊")
+                finished_phase = tournament.phases[0]
+                qualifiers = finished_phase.get_qualifiers()
+                if qualifiers:
+                    print("Qualifiers:")
+                    for q in qualifiers:
+                        print(f"  - {q.display_name}")
 
-        elif choice == '4':
+        elif choice == "4":
             active = engine.active_matches
             if not active:
                 print("❌ No matches currently suspended in memory.")
                 continue
-                
+
             print("\n--- Suspended Matches ---")
             match_ids = list(active.keys())
             for i, mid in enumerate(match_ids):
                 m = active[mid]
                 desc = " vs ".join([p.name for p in m.contestants])
                 print(f"[{i}] {desc} (ID: {mid[:8]}...)")
-                
+
             try:
                 m_idx = int(input("Select match to resume: ").strip())
                 resumed = engine.get_match(match_ids[m_idx])
                 if resumed is None:
                     print("❌ Invalid selection.")
                     continue
-                resumed.notify()
-                match_loop(engine, match_ids[m_idx], engine.get_available_plugins()[0])
+                resumed.notify(None)
+                resume_adapter = engine.get_adapter(sport_id_for_match(resumed))
+                if resume_adapter is None:
+                    print("❌ No console adapter available.")
+                    continue
+                match_loop(engine, match_ids[m_idx], resume_adapter)
             except (ValueError, IndexError, AttributeError):
                 print("❌ Invalid selection.")
-                
-        elif choice == '5':
+
+        elif choice == "5":
             print("\n--- Global Roster ---")
-            for player_base in engine.global_players.values():
-                ind_player = cast(IndividualPlayer, player_base)
-                nick = getattr(ind_player, "metadata", {}).get("nickname", "N/A")
-                print(f"- {ind_player.name} (Nickname: {nick}) | ID: {ind_player.id[:8]}")
-                
-        elif choice == '6':
+            individuals = engine.list_individual_players()
+            if individuals:
+                print("\nIndividual players (darts):")
+                for ind_player in individuals:
+                    nick = ind_player.metadata.get("nickname", "N/A")
+                    print(
+                        f"- {ind_player.name} (Nickname: {nick}) | ID: {ind_player.id[:8]}"
+                    )
+            teams = engine.list_teams()
+            if teams:
+                print("\nTeams (football):")
+                for team in teams:
+                    squad = ", ".join(p.name for p in team.roster) or "(empty)"
+                    print(f"- {team.name}: {squad}")
+            if not individuals and not teams:
+                print("No contestants registered.")
+
+        elif choice == "6":
             print("\n--- Match History (Archived) ---")
             if not engine.archived_matches:
                 print("No matches have been completed yet.")
                 continue
-                
+
             for mid, m in engine.archived_matches.items():
                 state = m.current_state
                 if isinstance(state, DartsContestState):
                     desc = " vs ".join([pl.name for pl in state.players])
                     print(f"\nMatch: {desc} (ID: {mid[:8]})")
-                    print(f"Format: {state.starting_score} Up | Best of {state.sets_to_win} Sets")
+                    print(
+                        f"Format: {state.starting_score} Up | Best of {state.sets_to_win} Sets"
+                    )
                     print("Final Scoreboard:")
                     for pl in state.players:
-                        print(f"  - {pl.name}: {state.sets_won[pl.id]} Sets, {state.legs_won[pl.id]} Legs")
+                        print(
+                            f"  - {pl.name}: {state.sets_won[pl.id]} Sets, {state.legs_won[pl.id]} Legs"
+                        )
                 elif isinstance(state, FootballContestState):
                     desc = " vs ".join([t.name for t in state.teams])
                     print(f"\nMatch: {desc} (ID: {mid[:8]})")
                     via = state.decided_by.replace("_", " ")
-                    outcome = "Draw" if state.was_draw else f"{state.winner.name if state.winner else '?'} ({via})"
+                    outcome = (
+                        "Draw"
+                        if state.was_draw
+                        else f"{state.winner.name if state.winner else '?'} ({via})"
+                    )
                     print(f"Result: {outcome}")
                     print("Final Score:")
                     for t in state.teams:
@@ -258,10 +429,11 @@ def main() -> None:
                     desc = " vs ".join([c.name for c in m.contestants])
                     print(f"\nMatch: {desc} (ID: {mid[:8]})")
             print("--------------------------------")
-                
-        elif choice == '7':
+
+        elif choice == "7":
             print("Shutting down SDM Sports Engine. Goodbye!")
             sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

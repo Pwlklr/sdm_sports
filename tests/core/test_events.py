@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 
-
-from src.core.contest_event import ContestEvent
-
-
-class DummyEvent(ContestEvent):
-    """Concrete dummy event for testing the abstract base behavior."""
-
-    pass
+from src.core.contest.event import Event
 
 
-def test_contest_event_creation():
+@dataclass(frozen=True, kw_only=True)
+class DummyEvent(Event):
+    competitor_id: str | None = None
+    team_id: str | None = None
+
+
+def test_event_creation() -> None:
     event = DummyEvent(competitor_id="Player1", team_id="TeamA")
 
     assert event.competitor_id == "Player1"
