@@ -7,7 +7,6 @@ from src.sports.darts.adapter import DartsConsoleAdapter
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig
 from src.sports.darts.darts_sport_factory import DartsSportFactory
 from src.sports.darts.descriptor import DARTS_SPORT
-from src.sports.football.adapter import FootballConsoleAdapter
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.descriptor import FOOTBALL_SPORT
 from src.sports.football.football_sport_factory import FootballSportFactory

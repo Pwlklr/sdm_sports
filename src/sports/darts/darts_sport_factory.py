@@ -19,9 +19,11 @@ class DartsSportFactory:
         for player in contestants:
             if not isinstance(player, IndividualPlayer):
                 raise ValueError("Darts matches require IndividualPlayer contestants.")
+        players = list(contestants)
         return Contest(
             contestants=contestants,
-            initial_state=DartsContestState(list(contestants), config=config),
+            initial_state=DartsContestState(players, config=config),
             ruleset=DartsRuleSet(config),
             result_factory=build_darts_result,
+            state_factory=lambda: DartsContestState(players, config=config),
         )

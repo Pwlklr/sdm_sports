@@ -1,5 +1,3 @@
-import pytest
-
 from src.core.system.sports_system_engine import SportsSystemEngine
 
 

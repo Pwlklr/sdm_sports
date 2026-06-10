@@ -1,5 +1,7 @@
 from src.core.tournament.tournament import Tournament
-from src.core.tournament.tournament_disciplinary_board import TournamentDisciplinaryBoard
+from src.core.tournament.tournament_disciplinary_board import (
+    TournamentDisciplinaryBoard,
+)
 from src.core.tournament.draw import RandomDrawStrategy, RoundRobinDrawStrategy
 from src.core.tournament.event import (
     MatchCompleted,

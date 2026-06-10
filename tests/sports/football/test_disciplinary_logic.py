@@ -1,6 +1,7 @@
 import pytest
 
 from src.core.contest import Contest
+from src.core.shared.command_rejected import CommandRejected
 from src.core.contestant.models import IndividualPlayer, Team
 from src.sports.football.contest.commands import CommitFoul, ScoreGoal, StartMatch
 from src.sports.football.contest.football_match_config import FootballMatchConfig
@@ -14,9 +15,7 @@ def _started_contest() -> Contest:
     away = Team("Away", "away")
     home.add_player(IndividualPlayer("P9", "p9"))
     away.add_player(IndividualPlayer("Other", "other"))
-    contest = FootballSportFactory().create_contest(
-        [home, away], FootballMatchConfig()
-    )
+    contest = FootballSportFactory().create_contest([home, away], FootballMatchConfig())
     contest.handle(StartMatch())
     return contest
 
@@ -62,22 +61,24 @@ def test_dismissed_player_cannot_receive_more_cards() -> None:
     )
     assert state.disciplinary.is_dismissed("p9")
 
-    _handle_foul(
-        contest,
-        team_index=0,
-        minute=20,
-        card="yellow",
-        offender_id="p9",
-    )
+    with pytest.raises(CommandRejected):
+        _handle_foul(
+            contest,
+            team_index=0,
+            minute=20,
+            card="yellow",
+            offender_id="p9",
+        )
     assert state.disciplinary.yellows_for("p9") == 0
 
-    _handle_foul(
-        contest,
-        team_index=0,
-        minute=25,
-        card="red",
-        offender_id="p9",
-    )
+    with pytest.raises(CommandRejected):
+        _handle_foul(
+            contest,
+            team_index=0,
+            minute=25,
+            card="red",
+            offender_id="p9",
+        )
     assert state.disciplinary.yellows_for("p9") == 0
 
 
@@ -116,9 +117,7 @@ def test_score_goal_records_scorer_and_minute() -> None:
     contest = _started_contest()
     state = contest.current_state
 
-    contest.handle(
-        ScoreGoal(team_index=0, minute=23, scorer_id="p9", penalty=True)
-    )
+    contest.handle(ScoreGoal(team_index=0, minute=23, scorer_id="p9", penalty=True))
     period = state.current_period
     assert period is not None
     assert len(period.goals) == 1
@@ -139,8 +138,8 @@ def test_ruleset_rejects_card_for_dismissed_player() -> None:
     state.disciplinary.dismiss("x")
     ruleset = FootballRuleSet(FootballMatchConfig())
 
-    events = ruleset.decide(
-        CommitFoul(team_index=0, minute=10, card="yellow", offender_id="x"),
-        state,
-    )
-    assert events == []
+    with pytest.raises(CommandRejected):
+        ruleset.decide(
+            CommitFoul(team_index=0, minute=10, card="yellow", offender_id="x"),
+            state,
+        )

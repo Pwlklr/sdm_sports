@@ -39,7 +39,9 @@ def roster_status_for_team(
     ]
 
 
-def roster_status_for_match(state: FootballContestState) -> dict[str, list[PlayerRosterStatus]]:
+def roster_status_for_match(
+    state: FootballContestState,
+) -> dict[str, list[PlayerRosterStatus]]:
     """All squads keyed by team id — merges Team.roster with state.disciplinary."""
     result: dict[str, list[PlayerRosterStatus]] = {}
     for team in state.teams:
@@ -68,7 +70,9 @@ def format_squad_lines_from_state(
     ]
 
 
-def team_disciplinary_summary(team: Team, disciplinary: DisciplinaryRecord) -> tuple[int, int]:
+def team_disciplinary_summary(
+    team: Team, disciplinary: DisciplinaryRecord
+) -> tuple[int, int]:
     yellows = sum(disciplinary.yellows_for(player.id) for player in team.roster)
     sent_off = sum(1 for player in team.roster if disciplinary.is_dismissed(player.id))
     return yellows, sent_off

@@ -58,6 +58,32 @@ class MatchPeriod:
         self._ended = True
 
 
+class MatchLineup:
+    """Per-team match lineup: who started, who is on the bench, and substitutions used."""
+
+    def __init__(self, starting: Set[str], bench: Set[str]) -> None:
+        self.starting: Set[str] = set(starting)
+        self.bench: Set[str] = set(bench)
+        self.subs_made: int = 0
+
+    def is_on_pitch(self, player_id: str) -> bool:
+        return player_id in self.starting
+
+    def is_on_bench(self, player_id: str) -> bool:
+        return player_id in self.bench
+
+    def substitute(self, player_out: str, player_in: str) -> None:
+        self.starting.discard(player_out)
+        self.starting.add(player_in)
+        self.bench.discard(player_in)
+        self.bench.add(player_out)
+        self.subs_made += 1
+
+    def active_on_pitch(self, dismissed: Set[str]) -> int:
+        """Players currently on the pitch who have not been sent off."""
+        return sum(1 for player_id in self.starting if player_id not in dismissed)
+
+
 class DisciplinaryRecord:
     """Read model: card counts and dismissals."""
 

@@ -4,19 +4,21 @@ from typing import Any, List, Optional
 
 from src.core.contest.contest import Contest
 from src.core.contestant.models import Contestant
-from src.core.tournament.tournament_disciplinary_board import TournamentDisciplinaryBoard
+from src.core.tournament.tournament_disciplinary_board import (
+    TournamentDisciplinaryBoard,
+)
 from src.core.tournament.event import (
     MatchCompleted,
-    MatchScheduled,
-    PhaseCompleted,
-    PlayerRegistered,
-    RegistrationClosed,
-    RegistrationOpened,
     TournamentEvent,
 )
 from src.core.tournament.phase import GroupStagePhase, TournamentPhase
+from src.core.tournament.tournament_policy import (
+    DefaultTournamentPolicy,
+    TournamentPolicy,
+)
 from src.core.tournament.tournament_registration import TournamentRegistration
 from src.core.tournament.tournament_scheduler import TournamentScheduler
+from src.core.tournament.tournament_state import DefaultTournamentState
 
 
 class Tournament:
@@ -32,22 +34,31 @@ class Tournament:
         registration: TournamentRegistration | None = None,
         scheduler: TournamentScheduler | None = None,
         disciplinary_board: TournamentDisciplinaryBoard | None = None,
+        policy: TournamentPolicy | None = None,
     ) -> None:
         self.id = tournament_id
         self.name = name
         self.contestants: List[Contestant] = []
         self.phases: List[TournamentPhase] = []
-        self.current_phase_idx: int = 0
-        self.is_completed: bool = False
+        self.state = DefaultTournamentState()
 
         self.registration = registration or TournamentRegistration()
         self.scheduler = scheduler or TournamentScheduler()
         self.disciplinary_board = disciplinary_board or TournamentDisciplinaryBoard()
+        self.policy = policy or DefaultTournamentPolicy()
         self._history: list[TournamentEvent] = []
 
     @property
     def history(self) -> list[TournamentEvent]:
         return self._history.copy()
+
+    @property
+    def current_phase_idx(self) -> int:
+        return self.state.current_phase_index
+
+    @property
+    def is_completed(self) -> bool:
+        return self.state.is_complete
 
     @property
     def current_phase(self) -> Optional[TournamentPhase]:
@@ -59,6 +70,7 @@ class Tournament:
 
     def add_phase(self, phase: TournamentPhase) -> None:
         self.phases.append(phase)
+        self.state.phase_count = len(self.phases)
 
     def register_contestant(self, contestant: Contestant) -> None:
         if contestant not in self.contestants:
@@ -66,34 +78,8 @@ class Tournament:
 
     def handle(self, event: TournamentEvent) -> list[TournamentEvent]:
         self._history.append(event)
-        emitted: list[TournamentEvent] = []
-
-        if isinstance(event, RegistrationOpened):
-            return emitted
-
-        if isinstance(event, PlayerRegistered):
-            self.register_contestant(event.contestant)
-            return emitted
-
-        if isinstance(event, RegistrationClosed):
-            return emitted
-
-        if isinstance(event, MatchScheduled):
-            return emitted
-
-        if isinstance(event, MatchCompleted):
-            phase = self.current_phase
-            if phase is not None:
-                phase.record_match_result(event.match)
-                if phase.check_completion():
-                    qualifiers = phase.get_qualifiers()
-                    emitted.append(PhaseCompleted(phase.name, qualifiers))
-                    self._advance_phase()
-            return emitted
-
-        if isinstance(event, PhaseCompleted):
-            return emitted
-
+        emitted = self.policy.handle(event, self)
+        self._history.extend(emitted)
         return emitted
 
     def schedule_phase_fixtures(
@@ -147,16 +133,14 @@ class Tournament:
         return emitted
 
     def complete_match(self, match: Contest) -> list[TournamentEvent]:
-        return self.handle(MatchCompleted(match, match.result))
+        return self.handle(MatchCompleted(match, match.official_result))
 
-    def _advance_phase(self) -> None:
-        self.current_phase_idx += 1
-        if self.current_phase_idx >= len(self.phases) and self.phases:
-            self.is_completed = True
+    def advance_to_next_phase(self) -> None:
+        self.state.advance_phase()
 
     def advance_phase(self) -> None:
         phase = self.current_phase
         if phase:
             phase.check_completion()
             if phase.is_completed:
-                self._advance_phase()
+                self.advance_to_next_phase()

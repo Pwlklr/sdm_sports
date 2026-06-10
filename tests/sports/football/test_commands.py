@@ -1,4 +1,3 @@
-
 from src.core.contest import Contest
 from src.core.contestant.models import IndividualPlayer, Team
 from src.sports.football.contest.commands import (

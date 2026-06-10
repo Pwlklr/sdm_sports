@@ -45,4 +45,3 @@ def test_scoreboard_after_last_dart_does_not_show_fourth_dart(
     captured = capsys.readouterr()
     assert "Dart 4 of 3" not in captured.out
     assert "Turn:" not in captured.out
-

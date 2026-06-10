@@ -1,5 +1,6 @@
 from src.sports.darts.contest.entities import DartThrow, DartTurn
 
+
 def test_dart_throw_value_object() -> None:
     throw = DartThrow(20, 3)
     assert throw.points == 60

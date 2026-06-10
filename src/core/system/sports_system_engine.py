@@ -1,13 +1,16 @@
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from src.core.contest import Contest
 from src.core.contest.command import Command
+from src.core.contest.result import Result
+from src.core.contest.result_override import ContestOutcome, ResultOverride
 from src.core.contestant.models import Contestant, IndividualPlayer, Team
 from src.core.sport.console_adapter import ConsoleAdapter
 from src.core.sport.registered_sport import RegisteredSport
 from src.core.sport.sport_descriptor import SportDescriptor
 from src.core.sport.sport_factory import SportFactory
+from src.core.sport.sport_plugin import SportPlugin
 from src.core.tournament import Tournament
 from src.core.tournament.event import MatchScheduled
 
@@ -15,12 +18,19 @@ from src.core.tournament.event import MatchScheduled
 class SportsSystemEngine:
     """Central entry point: repositories and command dispatch for the sports library."""
 
-    def __init__(self) -> None:
+    def __init__(self, sports: Iterable[SportPlugin] = ()) -> None:
         self.global_players: Dict[str, Contestant] = {}
         self.tournaments: Dict[str, Tournament] = {}
         self.active_matches: Dict[str, Contest] = {}
         self.archived_matches: Dict[str, Contest] = {}
         self._sports: Dict[str, RegisteredSport] = {}
+        for plugin in sports:
+            self.register_plugin(plugin)
+
+    def register_plugin(self, plugin: SportPlugin) -> None:
+        self._sports[plugin.descriptor.id] = RegisteredSport(
+            plugin.descriptor, plugin.factory, plugin.adapter
+        )
 
     def register_sport(
         self,
@@ -127,10 +137,30 @@ class SportsSystemEngine:
         events = tournament.close_registration(factory, config)
         return [event for event in events if isinstance(event, MatchScheduled)]
 
-    def complete_tournament_match(
-        self, tournament: Tournament, match_id: str
-    ) -> None:
+    def complete_tournament_match(self, tournament: Tournament, match_id: str) -> None:
         match = self.get_match(match_id)
         if match is None:
             raise ValueError(f"Match with ID '{match_id}' not found in active memory.")
         tournament.complete_match(match)
+
+    def override_result(
+        self, match_id: str, result: Result, reason: str
+    ) -> None:
+        """Set the official result outside the event log (walkover, commission, forfeit, etc.).
+
+        The played ``Contest.result``, state and history are preserved unchanged.
+        """
+        match = self.active_matches.get(match_id) or self.archived_matches.get(match_id)
+        if match is None:
+            raise ValueError(f"Match with ID '{match_id}' not found.")
+        match.result_override = ResultOverride(result=result, reason=reason)
+
+    def award_walkover(
+        self, match_id: str, winner: Optional[Contestant], reason: str = "walkover"
+    ) -> None:
+        """Convenience wrapper: override with a minimal walkover/forfeit outcome."""
+        self.override_result(
+            match_id,
+            ContestOutcome(winner, decided_by=reason),
+            reason=reason,
+        )

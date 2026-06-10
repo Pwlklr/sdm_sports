@@ -16,6 +16,7 @@ class DrawStrategy(ABC):
     def generate_draw(
         self, contestants: list[Contestant]
     ) -> list[tuple[Contestant, Contestant]]:
+        """Return matchups as (home, away) tuples; the first side is the home side."""
         pass
 
     def validate_contestants(self, contestants: list[Contestant]) -> None:
@@ -84,9 +85,10 @@ class KnockoutPhase(TournamentPhase):
         self._winners: list[Contestant] = []
 
     def _apply_result(self, contest: Contest) -> None:
-        if contest.result is None:
+        result = contest.official_result
+        if result is None:
             return
-        winner = contest.result.get_winner()
+        winner = result.get_winner()
         if winner is not None and winner not in self._winners:
             self._winners.append(winner)
 
@@ -106,7 +108,8 @@ class GroupStagePhase(TournamentPhase):
             self.standings[contestant.id] = GroupStanding(contestant=contestant)
 
     def _apply_result(self, contest: Contest) -> None:
-        if contest.result is None:
+        result = contest.official_result
+        if result is None:
             return
 
         sides = contest.contestants
@@ -122,7 +125,7 @@ class GroupStagePhase(TournamentPhase):
         home_row.played += 1
         away_row.played += 1
 
-        winner = contest.result.get_winner()
+        winner = result.get_winner()
         if winner is None:
             home_row.draws += 1
             away_row.draws += 1

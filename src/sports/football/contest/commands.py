@@ -37,3 +37,18 @@ class EndPeriod(Command):
 class TakePenaltyKick(Command):
     team_index: int
     scored: bool
+
+
+@dataclass(frozen=True, kw_only=True)
+class SubmitLineup(Command):
+    team_index: int
+    starting: tuple[str, ...]
+    bench: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class SubstitutePlayer(Command):
+    team_index: int
+    player_out: str
+    player_in: str
+    minute: int

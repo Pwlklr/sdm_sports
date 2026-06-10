@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.core.contest.event import Event
 from src.core.contest.rule_set import RuleSet
+from src.core.shared.command_rejected import reject
 from src.sports.darts.contest.commands import CallOcheFault, StartMatch, ThrowDart
 from src.sports.darts.contest.events import (
     Busted,
@@ -28,21 +29,23 @@ class DartsRuleSet(RuleSet):
     def decide_start_match(
         self, command: StartMatch, state: DartsContestState
     ) -> list[Event]:
-        if state.is_completed or state.match_started:
-            return []
+        if state.is_completed:
+            reject("Mecz jest juz zakonczony.")
+        if state.match_started:
+            reject("Mecz zostal juz rozpoczety.")
         return [MatchStarted()]
 
     def decide_throw_dart(
         self, command: ThrowDart, state: DartsContestState
     ) -> list[Event]:
         if state.is_completed:
-            return []
+            reject("Mecz jest zakonczony - nie mozna rzucac.")
 
         if state.current_turn is None:
-            return []
+            reject("Brak aktywnej tury - rozpocznij mecz.")
 
         if len(state.current_turn.throws) >= state.darts_per_turn:
-            return []
+            reject("Tura jest juz zakonczona (limit lotek osiagniety).")
 
         player_id = state.current_player.id
         pts_scored = _dart_points(command.sector, command.multiplier)
@@ -68,11 +71,11 @@ class DartsRuleSet(RuleSet):
         self, command: CallOcheFault, state: DartsContestState
     ) -> list[Event]:
         if state.is_completed:
-            return []
+            reject("Mecz jest zakonczony - nie mozna zglosic faulu.")
         if state.current_turn is None:
-            return []
+            reject("Brak aktywnej tury - rozpocznij mecz.")
         if len(state.current_turn.throws) >= state.darts_per_turn:
-            return []
+            reject("Tura jest juz zakonczona (limit lotek osiagniety).")
 
         return [
             DartScored(

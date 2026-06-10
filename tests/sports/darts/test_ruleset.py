@@ -93,3 +93,38 @@ def test_bust_on_zero_without_double(
     _handle_throw(state, ruleset, 20, 1)
     assert state.scores["p1"] == 20
     assert state.current_player == p2
+
+
+def _double_in_setup() -> tuple[DartsContestState, DartsRuleSet]:
+    config = DartsMatchConfig(
+        starting_score=501,
+        sets_to_win_match=1,
+        legs_to_win_set=1,
+        in_multiplier=2,
+        out_multiplier=2,
+    )
+    state = DartsContestState(
+        [IndividualPlayer("Player 1", "p1"), IndividualPlayer("Player 2", "p2")],
+        config=config,
+    )
+    state.apply(MatchStarted())
+    return state, DartsRuleSet(config)
+
+
+def test_double_in_opening_dart_without_double_scores_zero() -> None:
+    state, ruleset = _double_in_setup()
+    _handle_throw(state, ruleset, 20, 1)
+    assert state.scores["p1"] == 501
+
+
+def test_double_in_opening_dart_with_double_scores() -> None:
+    state, ruleset = _double_in_setup()
+    _handle_throw(state, ruleset, 20, 2)
+    assert state.scores["p1"] == 461
+
+
+def test_double_in_only_first_scoring_dart_is_gated() -> None:
+    state, ruleset = _double_in_setup()
+    _handle_throw(state, ruleset, 20, 2)
+    _handle_throw(state, ruleset, 20, 1)
+    assert state.scores["p1"] == 441

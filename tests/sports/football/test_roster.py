@@ -1,8 +1,5 @@
-import pytest
-
 from src.core.contestant.models import IndividualPlayer, Team
 from src.sports.football.contest.roster import (
-    parse_console_player_number,
     parse_console_team_number,
     player_on_team,
     resolve_roster_player_by_number,

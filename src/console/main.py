@@ -2,6 +2,12 @@ import sys
 from typing import List
 
 from src.core.contest import Contest
+from src.core.shared.command_rejected import CommandRejected
+from src.console.tournament_view import (
+    active_matches,
+    schedule_view,
+    standings_table,
+)
 from src.core.sport.console_adapter import ConsoleAdapter
 from src.core.sport.match_setup import create_console_contest
 from src.core.sport.registered_sport import RegisteredSport
@@ -15,12 +21,13 @@ from src.core.tournament.phase import (
 )
 from src.core.tournament.draw import RandomDrawStrategy, RoundRobinDrawStrategy
 from src.sports.darts.descriptor import DARTS_SPORT
-from src.sports.darts.darts_sport_factory import DartsSportFactory
-from src.sports.darts.adapter import DartsConsoleAdapter
+from src.sports.darts.plugin import DARTS_PLUGIN
 from src.sports.darts.contest.darts_contest_state import DartsContestState
 from src.sports.football.descriptor import FOOTBALL_SPORT
-from src.sports.football.football_sport_factory import FootballSportFactory
-from src.sports.football.adapter import FootballConsoleAdapter
+from src.sports.football.plugin import FOOTBALL_PLUGIN
+from src.sports.football.contest.discipline_carryover import accrue_suspensions
+from src.sports.football.contest.football_rule_set import FootballRuleSet
+from src.sports.football.contest.squad_context import SquadContext
 from src.sports.football.contest.state import FootballContestState
 
 
@@ -83,10 +90,10 @@ def match_loop(
         if command:
             try:
                 engine.dispatch_match_command(match_id, command)
+            except CommandRejected as e:
+                print(f"⛔ Odrzucono: {e.reason}")
             except ValueError as e:
                 print(f"⚠️ System Error: {e}")
-            except Exception as e:
-                print(f"⚠️ Domain Rule Rejected: {e}")
 
     if match.current_state.is_completed:
         print("\n🎉 Match Complete!")
@@ -103,19 +110,87 @@ def setup_demo_roster(engine: SportsSystemEngine) -> None:
 
     engine.create_team_with_roster(
         "Arsenal FC",
-        ["Raya", "Saliba", "Odegaard", "Saka", "Havertz"],
+        [
+            "Raya",
+            "Saliba",
+            "Gabriel",
+            "Zinchenko",
+            "White",
+            "Odegaard",
+            "Rice",
+            "Partey",
+            "Havertz",
+            "Saka",
+            "Jesus",
+            "Ramsdale",
+            "Tomiyasu",
+            "Jorginho",
+            "Trossard",
+            "Nketiah",
+        ],
     )
     engine.create_team_with_roster(
         "Manchester City",
-        ["Ederson", "Rodri", "De Bruyne", "Foden", "Haaland"],
+        [
+            "Ederson",
+            "Walker",
+            "Dias",
+            "Stones",
+            "Gvardiol",
+            "Rodri",
+            "De Bruyne",
+            "Silva",
+            "Foden",
+            "Haaland",
+            "Alvarez",
+            "Ortega",
+            "Akanji",
+            "Kovacic",
+            "Doku",
+            "Grealish",
+        ],
     )
     engine.create_team_with_roster(
         "Liverpool FC",
-        ["Alisson", "Van Dijk", "Salah", "Mac Allister", "Nunez"],
+        [
+            "Alisson",
+            "Alexander-Arnold",
+            "Konate",
+            "Van Dijk",
+            "Robertson",
+            "Mac Allister",
+            "Szoboszlai",
+            "Endo",
+            "Salah",
+            "Nunez",
+            "Diaz",
+            "Kelleher",
+            "Quansah",
+            "Gravenberch",
+            "Gakpo",
+            "Jota",
+        ],
     )
     engine.create_team_with_roster(
         "Chelsea FC",
-        ["Sanchez", "James", "Caicedo", "Palmer", "Jackson"],
+        [
+            "Sanchez",
+            "James",
+            "Colwill",
+            "Disasi",
+            "Chilwell",
+            "Caicedo",
+            "Enzo",
+            "Gallagher",
+            "Palmer",
+            "Jackson",
+            "Sterling",
+            "Petrovic",
+            "Badiashile",
+            "Madueke",
+            "Broja",
+            "Nkunku",
+        ],
     )
 
 
@@ -183,9 +258,10 @@ def select_teams(engine: SportsSystemEngine, team_count: int = 2) -> List[Team]:
         for idx, team in enumerate(teams):
             if team in selected_teams:
                 continue
-            roster = ", ".join(
-                f"{n}. {p.name}" for n, p in enumerate(team.roster, start=1)
-            ) or "(empty squad)"
+            roster = (
+                ", ".join(f"{n}. {p.name}" for n, p in enumerate(team.roster, start=1))
+                or "(empty squad)"
+            )
             print(f"[{idx}] {team.name} — {roster}")
 
         try:
@@ -213,9 +289,59 @@ def select_contestants(
 ) -> List[Contestant]:
     if sport.descriptor.id == FOOTBALL_SPORT.id:
         min_teams = 3 if for_tournament else 2
-        return select_teams(engine, team_count=min_teams)
+        teams: List[Contestant] = list(select_teams(engine, team_count=min_teams))
+        return teams
     min_players = 3 if for_tournament else 2
-    return select_players(engine, min_players=min_players)
+    players: List[Contestant] = list(select_players(engine, min_players=min_players))
+    return players
+
+
+def play_tournament_match(
+    engine: SportsSystemEngine,
+    tournament: Tournament,
+    match: Contest,
+    adapter: ConsoleAdapter,
+) -> None:
+    sides = " vs ".join(c.name for c in match.contestants)
+    print("\n==============================================")
+    print(f" 🎯 TOURNAMENT MATCH: {sides}")
+    print("==============================================")
+    input("Press Enter to begin match...")
+
+    _apply_suspension_context(tournament, match)
+
+    engine.register_active_match(match)
+    adapter.attach_view(match)
+    start_cmd = adapter.get_start_command()
+    if start_cmd:
+        engine.dispatch_match_command(match.id, start_cmd)
+
+    match_loop(engine, match.id, adapter)
+
+    if not match.current_state.is_completed:
+        print("\n⏸️ Match suspended. You can resume it later from this menu.")
+        return
+
+    engine.complete_tournament_match(tournament, match.id)
+    _carry_over_discipline(tournament, match)
+    engine.archive_match(match.id)
+
+
+def _apply_suspension_context(tournament: Tournament, match: Contest) -> None:
+    """Feed current tournament suspensions into a football match before it starts."""
+    if not isinstance(match.current_state, FootballContestState):
+        return
+    ruleset = match._ruleset
+    if isinstance(ruleset, FootballRuleSet):
+        ruleset._squad_context = SquadContext(
+            tournament.disciplinary_board.suspended_ids()
+        )
+
+
+def _carry_over_discipline(tournament: Tournament, match: Contest) -> None:
+    """After a football match, accrue cards into tournament-wide suspensions."""
+    if isinstance(match.current_state, FootballContestState):
+        accrue_suspensions(tournament.disciplinary_board, match.current_state)
 
 
 def run_tournament_matches(
@@ -223,42 +349,55 @@ def run_tournament_matches(
     tournament: Tournament,
     adapter: ConsoleAdapter,
 ) -> None:
-    phase = tournament.current_phase
-    if phase is None:
-        print("❌ Tournament has no active phase.")
-        return
-
-    total = len(phase.contests)
-    for i, match in enumerate(phase.contests):
-        sides = " vs ".join(c.name for c in match.contestants)
-        print("\n==============================================")
-        print(f" 🎯 TOURNAMENT MATCH {i + 1} OF {total}")
-        print(f" UP NEXT: {sides}")
-        print("==============================================")
-        input("Press Enter to begin match...")
-
-        engine.register_active_match(match)
-        adapter.attach_view(match)
-        start_cmd = adapter.get_start_command()
-        if start_cmd:
-            engine.dispatch_match_command(match.id, start_cmd)
-
-        match_loop(engine, match.id, adapter)
-
-        if not match.current_state.is_completed:
-            print(f"\n⏸️ Tournament '{tournament.name}' paused. Return to menu.")
+    while not tournament.is_completed:
+        phase = tournament.current_phase
+        if phase is None:
+            print("❌ Tournament has no active phase.")
             return
 
-        engine.complete_tournament_match(tournament, match.id)
-        engine.archive_match(match.id)
+        playable = active_matches(phase)
+        print(f"\n=== Turniej '{tournament.name}' | Faza: {phase.name} ===")
+        print("1. Rozegraj mecz")
+        print("2. Tabela wynikow")
+        print("3. Harmonogram i wyniki")
+        print("4. Powrot do menu glownego")
+        action = input("Wybor: ").strip()
+
+        if action == "1":
+            if not playable:
+                print("✅ Wszystkie mecze tej fazy rozegrane.")
+                continue
+            print("\nMecze do rozegrania:")
+            for i, match in enumerate(playable):
+                sides = " vs ".join(c.name for c in match.contestants)
+                print(f"[{i}] {sides}")
+            try:
+                pick = int(input("Wybierz mecz: ").strip())
+                chosen = playable[pick]
+            except (ValueError, IndexError):
+                print("❌ Nieprawidlowy wybor.")
+                continue
+            play_tournament_match(engine, tournament, chosen, adapter)
+
+        elif action == "2":
+            print("\n--- TABELA ---")
+            for line in standings_table(phase):
+                print(line)
+
+        elif action == "3":
+            print("\n--- HARMONOGRAM ---")
+            for line in schedule_view(phase):
+                print(line)
+
+        elif action == "4":
+            return
+
+        else:
+            print("❌ Nieprawidlowy wybor.")
 
 
 def main() -> None:
-    engine = SportsSystemEngine()
-    engine.register_sport(DARTS_SPORT, DartsSportFactory(), DartsConsoleAdapter())
-    engine.register_sport(
-        FOOTBALL_SPORT, FootballSportFactory(), FootballConsoleAdapter()
-    )
+    engine = SportsSystemEngine(sports=[DARTS_PLUGIN, FOOTBALL_PLUGIN])
 
     setup_demo_roster(engine)
 
@@ -421,7 +560,16 @@ def main() -> None:
                         if state.was_draw
                         else f"{state.winner.name if state.winner else '?'} ({via})"
                     )
-                    print(f"Result: {outcome}")
+                    if m.result_override is not None:
+                        override = m.result_override
+                        official_winner = override.result.get_winner()
+                        winner_name = official_winner.name if official_winner else "?"
+                        print(
+                            f"Official Result: {winner_name} ({override.reason})"
+                        )
+                        print(f"Played Result: {outcome}")
+                    else:
+                        print(f"Result: {outcome}")
                     print("Final Score:")
                     for t in state.teams:
                         print(f"  - {t.name}: {state.scores[t.id]} goals")

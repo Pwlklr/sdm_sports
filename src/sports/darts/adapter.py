@@ -5,6 +5,7 @@ from src.core.contest.command import Command
 from src.core.sport.console_adapter import ConsoleAdapter
 from src.core.sport.sport_descriptor import SportDescriptor
 from src.sports.darts.console.darts_console_view import DartsConsoleView
+from src.sports.darts.console.darts_timeline import print_darts_timeline
 from src.sports.darts.contest.commands import CallOcheFault, StartMatch, ThrowDart
 from src.sports.darts.contest.darts_contest_state import DartsContestState
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig
@@ -17,6 +18,13 @@ class DartsConsoleAdapter(ConsoleAdapter):
         return DARTS_SPORT
 
     def collect_config(self) -> DartsMatchConfig:
+        print("\nConfig: 1. Domyslny (501)  2. Szybki (301)  3. Wlasny")
+        choice = input("Choice [Default 1]: ").strip() or "1"
+        if choice == "2":
+            return DartsMatchConfig.quick_301()
+        if choice != "3":
+            return DartsMatchConfig.standard_501()
+
         start_score = int(input("\nStarting Score (e.g., 301, 501, 701): ").strip())
         if (start_score - 1) % 100 != 0:
             print(f"\n⚠️ WARNING: {start_score} is not a standard X01 starting score.")
@@ -46,10 +54,14 @@ class DartsConsoleAdapter(ConsoleAdapter):
         contest.attach(DartsConsoleView())
 
     def get_input_prompt(self, contest: Contest) -> str:
-        return "Action ('<sector> <mult>', '0', 'fault', 'suspend')"
+        return "Action ('<sector> <mult>', '0', 'fault', 'log', 'suspend')"
 
     def parse_command(self, user_input: str, contest: Contest) -> Optional[Command]:
         cleaned = user_input.strip().lower()
+
+        if cleaned == "log":
+            print_darts_timeline(contest)
+            return None
 
         if cleaned == "fault":
             return CallOcheFault()

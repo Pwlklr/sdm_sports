@@ -71,3 +71,18 @@ class MatchConcluded(FootballEvent):
     winner_id: str | None = None
     draw: bool = False
     decided_by: str = "regulation"
+
+
+@dataclass(frozen=True, kw_only=True)
+class LineupSubmitted(FootballEvent):
+    team_id: str
+    starting: tuple[str, ...]
+    bench: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlayerSubstituted(FootballEvent):
+    team_id: str
+    player_out: str
+    player_in: str
+    minute: int

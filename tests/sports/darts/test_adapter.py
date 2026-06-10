@@ -21,9 +21,7 @@ def _match(*players: IndividualPlayer):
     factory = _factory()
     adapter = _adapter()
     contestants = list(players) if players else [IndividualPlayer("P1")]
-    return create_console_contest(
-        factory, adapter, contestants, DartsMatchConfig()
-    )
+    return create_console_contest(factory, adapter, contestants, DartsMatchConfig())
 
 
 def test_adapter_descriptor() -> None:

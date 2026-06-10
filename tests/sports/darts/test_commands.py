@@ -1,4 +1,3 @@
-
 from src.core.contest import Contest
 from src.core.contestant import IndividualPlayer
 from src.sports.darts.contest.commands import CallOcheFault, StartMatch, ThrowDart

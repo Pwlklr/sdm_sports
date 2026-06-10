@@ -9,12 +9,14 @@ from src.core.contest.contest_state import ContestState
 from src.sports.football.contest.entities import (
     DisciplinaryRecord,
     Goal,
+    MatchLineup,
     MatchPeriod,
     PeriodKind,
 )
 from src.sports.football.contest.events import (
     ExtraTimeStarted,
     GoalScored,
+    LineupSubmitted,
     MatchConcluded,
     MatchStarted,
     PenaltyKickTaken,
@@ -23,6 +25,7 @@ from src.sports.football.contest.events import (
     PeriodStarted,
     PlayerCautioned,
     PlayerDismissed,
+    PlayerSubstituted,
 )
 
 if TYPE_CHECKING:
@@ -70,6 +73,9 @@ class FootballContestState(ContestState):
             self.penalty_shootout_rounds = config.penalty_shootout_rounds
             self.yellows_per_dismissal = config.yellows_per_dismissal
             self.golden_goal = config.golden_goal
+            self.players_on_pitch = config.players_on_pitch
+            self.min_players_on_pitch = config.min_players_on_pitch
+            self.max_substitutions = config.max_substitutions
         else:
             self.number_of_halves = number_of_halves
             self.half_length_minutes = half_length_minutes
@@ -79,8 +85,12 @@ class FootballContestState(ContestState):
             self.penalty_shootout_rounds = 5
             self.yellows_per_dismissal = 2
             self.golden_goal = False
+            self.players_on_pitch = 11
+            self.min_players_on_pitch = 7
+            self.max_substitutions = 5
 
         self.scores: Dict[str, int] = {t.id: 0 for t in teams}
+        self.lineups: Dict[str, MatchLineup] = {}
         self.penalty_scores: Dict[str, int] = {t.id: 0 for t in teams}
         self.penalty_attempts: Dict[str, int] = {t.id: 0 for t in teams}
         self.disciplinary = DisciplinaryRecord()
@@ -106,6 +116,15 @@ class FootballContestState(ContestState):
             if team.id == team_id:
                 return team
         return None
+
+    def lineup_for(self, team_id: str) -> Optional[MatchLineup]:
+        return self.lineups.get(team_id)
+
+    def active_players_on_pitch(self, team_id: str) -> int:
+        lineup = self.lineups.get(team_id)
+        if lineup is None:
+            return 0
+        return lineup.active_on_pitch(self.disciplinary.dismissed)
 
     def opponent_of(self, team: Contestant) -> Contestant:
         for candidate in self.teams:
@@ -215,6 +234,18 @@ def _apply_match_concluded(state: FootballContestState, fact: Event) -> None:
         state.winner = state.team_by_id(fact.winner_id)
 
 
+def _apply_lineup_submitted(state: FootballContestState, fact: Event) -> None:
+    assert isinstance(fact, LineupSubmitted)
+    state.lineups[fact.team_id] = MatchLineup(set(fact.starting), set(fact.bench))
+
+
+def _apply_player_substituted(state: FootballContestState, fact: Event) -> None:
+    assert isinstance(fact, PlayerSubstituted)
+    lineup = state.lineups.get(fact.team_id)
+    if lineup is not None:
+        lineup.substitute(fact.player_out, fact.player_in)
+
+
 FootballContestState._appliers = {
     MatchStarted: _apply_match_started,
     PeriodStarted: _apply_period_started,
@@ -226,4 +257,6 @@ FootballContestState._appliers = {
     PenaltyShootoutStarted: _apply_penalty_shootout_started,
     PenaltyKickTaken: _apply_penalty_kick_taken,
     MatchConcluded: _apply_match_concluded,
+    LineupSubmitted: _apply_lineup_submitted,
+    PlayerSubstituted: _apply_player_substituted,
 }

@@ -9,7 +9,9 @@ from src.core.contestant import IndividualPlayer
 from src.core.contest.rule_set import RuleSet
 from src.core.tournament.tournament_registration import TournamentRegistration
 from src.core.tournament.tournament_scheduler import TournamentScheduler
-from src.core.tournament.tournament_disciplinary_board import TournamentDisciplinaryBoard
+from src.core.tournament.tournament_disciplinary_board import (
+    TournamentDisciplinaryBoard,
+)
 from src.core.tournament.event import (
     RegistrationOpened,
     PlayerRegistered,
@@ -29,9 +31,7 @@ class DummyCommand(Command):
 
 
 class DummyRuleSet(RuleSet):
-    def decide_noop(
-        self, command: DummyCommand, state: DummyState
-    ) -> list[Event]:
+    def decide_noop(self, command: DummyCommand, state: DummyState) -> list[Event]:
         return []
 
     command_handlers = {DummyCommand: decide_noop}

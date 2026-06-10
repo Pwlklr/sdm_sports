@@ -1,5 +1,6 @@
 import pytest
 
+from src.core.shared.command_rejected import CommandRejected
 from src.core.contestant.models import IndividualPlayer, Team
 from src.sports.football.contest.commands import (
     CommitFoul,
@@ -89,7 +90,8 @@ def test_rejects_minute_beyond_clock(
     match_setup: tuple[FootballContestState, FootballRuleSet, Team, Team],
 ) -> None:
     state, ruleset, home, away = match_setup
-    assert ruleset.decide(ScoreGoal(team_index=0, minute=999), state) == []
+    with pytest.raises(CommandRejected):
+        ruleset.decide(ScoreGoal(team_index=0, minute=999), state)
 
 
 def test_draw_allowed_ends_match_after_regulation(

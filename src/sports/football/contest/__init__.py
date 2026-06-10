@@ -6,7 +6,12 @@ from src.sports.football.contest.commands import (
     TakePenaltyKick,
 )
 from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.contest.entities import DisciplinaryRecord, Goal, MatchPeriod, PeriodKind
+from src.sports.football.contest.entities import (
+    DisciplinaryRecord,
+    Goal,
+    MatchPeriod,
+    PeriodKind,
+)
 from src.sports.football.contest.events import (
     ExtraTimeStarted,
     GoalScored,
@@ -19,7 +24,10 @@ from src.sports.football.contest.events import (
     PlayerCautioned,
     PlayerDismissed,
 )
-from src.sports.football.contest.football_result import FootballResult, build_football_result
+from src.sports.football.contest.football_result import (
+    FootballResult,
+    build_football_result,
+)
 from src.sports.football.contest.football_rule_set import FootballRuleSet
 from src.sports.football.contest.state import FootballContestState, MatchPhase
 

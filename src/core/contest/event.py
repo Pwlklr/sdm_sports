@@ -11,6 +11,15 @@ class Event:
 
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     occurred_at: datetime = field(default_factory=datetime.now)
+    caused_by: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class EventReversed(Event):
+    """Compensating fact: records that an earlier event was withdrawn (e.g. VAR)."""
+
+    target_event_id: str
+    reason: str = "reversed"
 
 
 ContestEvent = Event

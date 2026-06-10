@@ -71,7 +71,7 @@ def parse_console_minute(token: str, max_minute: int) -> int | None:
     return minute
 
 
-def match_clock_limit(state) -> int:
+def match_clock_limit(state: object) -> int:
     from src.sports.football.contest.state import FootballContestState
 
     if not isinstance(state, FootballContestState):
@@ -85,7 +85,7 @@ def match_clock_limit(state) -> int:
     return total
 
 
-def player_name_for_id(state, player_id: str | None) -> str:
+def player_name_for_id(state: object, player_id: str | None) -> str:
     from src.sports.football.contest.state import FootballContestState
 
     if player_id is None or not isinstance(state, FootballContestState):
