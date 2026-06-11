@@ -1,7 +1,12 @@
+from __future__ import annotations
+
+import pytest
+
 from dataclasses import dataclass
 
 from src.core.contest.command import Command
-from src.core.contest import Contest
+from src.core.contest.result import Result
+from tests.core.contest_test_support import EmptyResult, StatefulContestState, make_contest
 from src.core.contest.event import Event
 from src.core.contestant import IndividualPlayer
 from src.core.contest.contest_state import ContestState
@@ -18,9 +23,15 @@ class MockFact(Event):
     pass
 
 
-class MockState(ContestState):
+class MockState(StatefulContestState):
     def apply(self, fact: Event) -> None:
         pass
+
+    def reset(self) -> MockState:
+        return MockState(self.contestants)
+
+    def build_result(self) -> Result:
+        return EmptyResult()
 
 
 class MockRuleSet(RuleSet):
@@ -34,22 +45,29 @@ class MockRuleSet(RuleSet):
 def test_contest_initialization() -> None:
     p1 = IndividualPlayer("Player 1")
     p2 = IndividualPlayer("Player 2")
-    state = MockState()
+    state = MockState([p1, p2])
     ruleset = MockRuleSet()
 
-    contest = Contest(contestants=[p1, p2], initial_state=state, ruleset=ruleset)
+    contest = make_contest(state, ruleset)
 
     assert contest.id is not None
     assert len(contest.contestants) == 2
     assert contest.current_state == state
-    assert contest.result is None
+    assert contest.result.played is None
+    assert not contest.result.is_finished()
+
+
+def test_get_final_result_raises_when_match_not_completed() -> None:
+    contest = make_contest(MockState([]), MockRuleSet())
+    with pytest.raises(ValueError, match="not completed"):
+        contest.get_final_result()
 
 
 def test_contest_handle_emits_facts() -> None:
     p1 = IndividualPlayer("Player 1")
-    state = MockState()
+    state = MockState([p1])
     ruleset = MockRuleSet()
-    contest = Contest(contestants=[p1], initial_state=state, ruleset=ruleset)
+    contest = make_contest(state, ruleset)
 
     emitted = contest.handle(MockCommand())
 

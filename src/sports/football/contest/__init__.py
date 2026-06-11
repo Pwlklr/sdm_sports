@@ -24,10 +24,7 @@ from src.sports.football.contest.events import (
     PlayerCautioned,
     PlayerDismissed,
 )
-from src.sports.football.contest.football_result import (
-    FootballResult,
-    build_football_result,
-)
+from src.sports.football.contest.football_result import FootballResult
 from src.sports.football.contest.football_rule_set import FootballRuleSet
 from src.sports.football.contest.state import FootballContestState, MatchPhase
 
@@ -56,5 +53,4 @@ __all__ = [
     "ScoreGoal",
     "StartMatch",
     "TakePenaltyKick",
-    "build_football_result",
 ]

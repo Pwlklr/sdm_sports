@@ -2,14 +2,14 @@ from src.core.contest import Contest
 from src.core.contestant import IndividualPlayer
 from src.sports.darts.contest.commands import CallOcheFault, StartMatch, ThrowDart
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig
-from src.sports.darts.darts_sport_factory import DartsSportFactory
+from src.core.contest import ContestFactory
+from src.sports.darts.descriptor import DARTS_SPORT
 
 
 def _contest() -> Contest:
-    factory = DartsSportFactory()
     p1 = IndividualPlayer("P1")
     p2 = IndividualPlayer("P2")
-    return factory.create_contest([p1, p2], DartsMatchConfig())
+    return ContestFactory.create(DARTS_SPORT.id, [p1, p2], DartsMatchConfig())
 
 
 def test_start_command_kicks_off() -> None:

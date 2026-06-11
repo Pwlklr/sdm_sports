@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.core.contest.command import Command
+from src.core.contest.command import Command, ReverseDecision
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -52,3 +52,13 @@ class SubstitutePlayer(Command):
     player_out: str
     player_in: str
     minute: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class VarOverturnGoal(ReverseDecision):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class RevokeCaution(ReverseDecision):
+    pass

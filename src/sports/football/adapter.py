@@ -1,19 +1,25 @@
 from typing import Optional
 
 from src.core.contest import Contest
-from src.core.contest.command import Command
+from src.core.contest.command import Command, ReverseDecision
+from src.core.console.reversal_catalog import (
+    parse_reversal_choice,
+    print_reversal_menu,
+    resolve_catalog_choice,
+)
 from src.core.contestant.models import Team
 from src.core.sport.console_adapter import ConsoleAdapter
 from src.core.sport.sport_descriptor import SportDescriptor
 from src.sports.football.console.football_command_parser import parse_football_command
 from src.sports.football.console.football_console_view import FootballConsoleView
-from src.sports.football.console.match_timeline import (
-    active_goals,
-    print_match_timeline,
+from src.sports.football.console.match_timeline import print_match_timeline
+from src.sports.football.console.reversal_catalog import (
+    build_football_reversal_catalog,
+    football_reverse_command,
 )
 from src.sports.football.contest.commands import StartMatch
 from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.contest.roster import format_team_header, player_name_for_id
+from src.sports.football.contest.roster import format_team_header
 from src.sports.football.contest.state import FootballContestState, MatchPhase
 from src.sports.football.descriptor import FOOTBALL_SPORT
 
@@ -55,13 +61,13 @@ class FootballConsoleAdapter(ConsoleAdapter):
                 if isinstance(t, Team)
             )
             if state.phase == MatchPhase.PENALTIES:
-                return f"Penalty [{sides}] ('pk <team> g|m', 'end')"
+                return f"Penalty [{sides}] ('pk <team> g|m', 'end', 'reverse [nr]')"
             return (
                 f"Action [{sides}] "
                 "('goal/og/pen <t> <min> [player]', "
                 "'yellow/red/foul <t> <player> <min> [reason]', "
                 "'lineup <t> <players...>', 'sub <t> <out> <in> [min]', "
-                "'roster [team]', 'log', 'var [goal#]', 'end')"
+                "'roster [team]', 'log', 'reverse [nr]', 'var [nr]', 'end')"
             )
         return "Action"
 
@@ -77,44 +83,54 @@ class FootballConsoleAdapter(ConsoleAdapter):
             print_match_timeline(contest)
             return None
 
+        if verb in {"reverse", "rev"}:
+            return self._parse_reversal_command(
+                cleaned, contest, state, goals_only=False, verb="reverse"
+            )
+
         if verb == "var":
-            self._handle_var(cleaned, contest, state)
-            return None
+            return self._parse_reversal_command(
+                cleaned, contest, state, goals_only=True, verb="var"
+            )
 
         return parse_football_command(user_input, state)
 
-    def _handle_var(
-        self, cleaned: str, contest: Contest, state: FootballContestState
-    ) -> None:
-        goals = active_goals(contest)
-        if not goals:
-            print("❌ Brak goli do anulowania.")
-            return
-
+    def _parse_reversal_command(
+        self,
+        cleaned: str,
+        contest: Contest,
+        state: FootballContestState,
+        *,
+        goals_only: bool,
+        verb: str,
+    ) -> Optional[ReverseDecision]:
+        catalog = build_football_reversal_catalog(
+            contest, state, goals_only=goals_only
+        )
         parts = cleaned.split()
+
         if len(parts) == 1:
-            print("\n--- VAR: wybierz gol do anulowania ('var <numer>') ---")
-            for number, goal in goals:
-                team = state.team_by_id(goal.team_id)
-                team_name = team.name if team is not None else "?"
-                scorer = player_name_for_id(state, goal.scorer_id)
-                scorer_text = f" {scorer}" if scorer else ""
-                print(f"  {number}. {goal.minute}' {team_name}{scorer_text}")
-            return
+            title = (
+                "VAR: wybierz gol do anulowania"
+                if goals_only
+                else "Zdarzenia do wycofania"
+            )
+            print_reversal_menu(catalog, title=title, usage=f"{verb} <numer>")
+            return None
 
-        try:
-            choice = int(parts[1])
-        except ValueError:
-            print("❌ Uzycie: var <numer gola>")
-            return
+        choice = parse_reversal_choice(parts)
+        if choice is None:
+            print(f"❌ Uzycie: {verb} <numer>")
+            return None
 
-        match = next((goal for number, goal in goals if number == choice), None)
-        if match is None:
-            print(f"❌ Gol numer '{choice}' nie istnieje.")
-            return
+        option = resolve_catalog_choice(catalog, choice)
+        if option is None:
+            print(f"❌ Zdarzenie numer '{parts[1]}' nie istnieje.")
+            return None
 
-        contest.reverse_event(match.event_id, reason="var")
-        print(f"✅ VAR: gol z {match.minute}' anulowany.")
+        reason = "var" if goals_only else "reverse"
+        print(f"✅ Wycofano zdarzenie nr {choice}.")
+        return football_reverse_command(contest, option.event_id, reason=reason)
 
     def get_start_command(self) -> Optional[Command]:
         return StartMatch()

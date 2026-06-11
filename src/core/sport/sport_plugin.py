@@ -4,15 +4,13 @@ from dataclasses import dataclass
 
 from src.core.sport.console_adapter import ConsoleAdapter
 from src.core.sport.sport_descriptor import SportDescriptor
-from src.core.sport.sport_factory import SportFactory
 
 
 @dataclass(frozen=True)
 class SportPlugin:
-    """Self-contained registration bundle for a sport: descriptor, factory and console adapter."""
+    """Self-contained registration bundle for a sport: descriptor and console adapter."""
 
     descriptor: SportDescriptor
-    factory: SportFactory
     adapter: ConsoleAdapter
 
     def __post_init__(self) -> None:

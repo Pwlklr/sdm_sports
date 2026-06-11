@@ -1,9 +1,7 @@
 from typing import Dict, Optional
 
-from src.core.contest.contest_state import ContestState
 from src.core.contestant import Contestant
 from src.core.contest.result import Result
-from src.sports.football.contest.state import FootballContestState
 
 
 class FootballResult(Result):
@@ -24,13 +22,3 @@ class FootballResult(Result):
 
     def get_winner(self) -> Optional[Contestant]:
         return self._winner
-
-
-def build_football_result(state: ContestState) -> FootballResult:
-    assert isinstance(state, FootballContestState)
-    return FootballResult(
-        winner=state.winner,
-        scores=state.scores,
-        was_draw=state.was_draw,
-        decided_by=state.decided_by,
-    )

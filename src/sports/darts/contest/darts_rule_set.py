@@ -23,7 +23,8 @@ def _dart_points(sector: int, multiplier: int) -> int:
 
 
 class DartsRuleSet(RuleSet):
-    def __init__(self, config: DartsMatchConfig) -> None:
+    def __init__(self, config: DartsMatchConfig, reversal_chain=None) -> None:
+        super().__init__(reversal_chain=reversal_chain)
         self._config = config
 
     def decide_start_match(
@@ -44,13 +45,16 @@ class DartsRuleSet(RuleSet):
         if state.current_turn is None:
             reject("Brak aktywnej tury - rozpocznij mecz.")
 
-        if len(state.current_turn.throws) >= state.darts_per_turn:
+        if len(state.current_turn.throws) >= state.config.darts_per_turn:
             reject("Tura jest juz zakonczona (limit lotek osiagniety).")
 
         player_id = state.current_player.id
         pts_scored = _dart_points(command.sector, command.multiplier)
-        if state.scores[player_id] == state.starting_score:
-            if state.in_multiplier > 1 and command.multiplier != state.in_multiplier:
+        if state.scores[player_id] == state.config.starting_score:
+            if (
+                state.config.in_multiplier > 1
+                and command.multiplier != state.config.in_multiplier
+            ):
                 pts_scored = 0
 
         projected_score = state.scores[player_id] - pts_scored
@@ -74,7 +78,7 @@ class DartsRuleSet(RuleSet):
             reject("Mecz jest zakonczony - nie mozna zglosic faulu.")
         if state.current_turn is None:
             reject("Brak aktywnej tury - rozpocznij mecz.")
-        if len(state.current_turn.throws) >= state.darts_per_turn:
+        if len(state.current_turn.throws) >= state.config.darts_per_turn:
             reject("Tura jest juz zakonczona (limit lotek osiagniety).")
 
         return [
@@ -93,7 +97,7 @@ class DartsRuleSet(RuleSet):
             return [LegWon(player_id=fact.player_id)]
 
         turn = state.current_turn
-        if turn is not None and len(turn.throws) >= state.darts_per_turn:
+        if turn is not None and len(turn.throws) >= state.config.darts_per_turn:
             return [TurnEnded(player_id=fact.player_id)]
         return []
 
@@ -101,14 +105,14 @@ class DartsRuleSet(RuleSet):
         return [TurnEnded(player_id=fact.player_id)]
 
     def react_leg_won(self, fact: LegWon, state: DartsContestState) -> list[Event]:
-        if state.legs_won[fact.player_id] >= state.legs_to_win_set:
+        if state.legs_won[fact.player_id] >= state.config.legs_to_win_set:
             return [SetWon(player_id=fact.player_id)]
 
         next_starter_idx = (state.leg_starting_player_idx + 1) % len(state.players)
         return [LegStarted(starting_player_id=state.players[next_starter_idx].id)]
 
     def react_set_won(self, fact: SetWon, state: DartsContestState) -> list[Event]:
-        if state.sets_won[fact.player_id] >= state.sets_to_win:
+        if state.sets_won[fact.player_id] >= state.config.sets_to_win_match:
             return [MatchConcluded(winner_id=fact.player_id)]
 
         next_starter_idx = (state.leg_starting_player_idx + 1) % len(state.players)
@@ -135,14 +139,14 @@ def _is_bust(
         return True
     if (
         projected_score == 0
-        and state.out_multiplier > 1
-        and multiplier != state.out_multiplier
+        and state.config.out_multiplier > 1
+        and multiplier != state.config.out_multiplier
     ):
         return True
     if (
         projected_score > 0
-        and state.out_multiplier > 1
-        and projected_score < state.out_multiplier
+        and state.config.out_multiplier > 1
+        and projected_score < state.config.out_multiplier
     ):
         return True
     return False

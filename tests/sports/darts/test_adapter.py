@@ -5,7 +5,6 @@ from src.core.sport.match_setup import create_console_contest
 from src.sports.darts.adapter import DartsConsoleAdapter
 from src.sports.darts.contest.commands import CallOcheFault, StartMatch, ThrowDart
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig
-from src.sports.darts.darts_sport_factory import DartsSportFactory
 from src.sports.darts.descriptor import DARTS_SPORT
 
 
@@ -13,15 +12,12 @@ def _adapter() -> DartsConsoleAdapter:
     return DartsConsoleAdapter()
 
 
-def _factory() -> DartsSportFactory:
-    return DartsSportFactory()
-
-
 def _match(*players: IndividualPlayer):
-    factory = _factory()
     adapter = _adapter()
     contestants = list(players) if players else [IndividualPlayer("P1")]
-    return create_console_contest(factory, adapter, contestants, DartsMatchConfig())
+    return create_console_contest(
+        DARTS_SPORT.id, adapter, contestants, DartsMatchConfig()
+    )
 
 
 def test_adapter_descriptor() -> None:
@@ -51,8 +47,8 @@ def test_create_console_contest() -> None:
     p1 = IndividualPlayer("P1")
     p2 = IndividualPlayer("P2")
     config = DartsMatchConfig(starting_score=301)
-    match = create_console_contest(_factory(), _adapter(), [p1, p2], config)
-    assert match.current_state.starting_score == 301
+    match = create_console_contest(DARTS_SPORT.id, _adapter(), [p1, p2], config)
+    assert match.current_state.config.starting_score == 301
 
 
 def test_adapter_parse_valid_command() -> None:

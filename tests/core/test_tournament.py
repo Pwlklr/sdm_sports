@@ -4,8 +4,9 @@ from dataclasses import dataclass
 
 from src.core.contest.command import Command
 from src.core.contest import Contest
+from src.core.contest.result import Result
+from tests.core.contest_test_support import EmptyResult, StatefulContestState, make_contest
 from src.core.contest.event import Event
-from src.core.contest.contest_state import ContestState
 from src.core.contestant import Contestant
 from src.core.contest.rule_set import RuleSet
 from src.core.tournament.phase import DrawStrategy, TournamentPhase
@@ -39,10 +40,16 @@ class EndFact(Event):
     pass
 
 
-class DummyState(ContestState):
+class DummyState(StatefulContestState):
     def apply(self, fact: Event) -> None:
         if isinstance(fact, EndFact):
             self.is_final = True
+
+    def reset(self) -> DummyState:
+        return DummyState(self.contestants)
+
+    def build_result(self) -> Result:
+        return EmptyResult()
 
 
 class DummyRuleSet(RuleSet):
@@ -72,7 +79,9 @@ def test_tournament_phase_observes_contest_completion() -> None:
     team_a = DummyContestant(name="Team A", contestant_id="T1")
     team_b = DummyContestant(name="Team B", contestant_id="T2")
 
-    contest = Contest([team_a, team_b], DummyState(), DummyRuleSet(), contest_id="C1")
+    contest = make_contest(
+        DummyState([team_a, team_b]), DummyRuleSet(), contest_id="C1"
+    )
     phase = DummyPhase("Phase-1", DummyDrawStrategy())
 
     phase.add_contest(contest)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.core.contest.command import Command
+from src.core.contest.command import Command, ReverseDecision
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -18,4 +18,9 @@ class ThrowDart(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class CallOcheFault(Command):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class RevokeDartThrow(ReverseDecision):
     pass

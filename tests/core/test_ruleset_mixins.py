@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 import pytest
 
 from src.core.contest.command import Command
-from src.core.contest.contest_state import ContestState
+from tests.core.contest_test_support import StatefulContestState
+from src.core.contest.result import Result
 from src.core.contest.event import Event
 from src.core.contest.rule_set import RuleSet
 
@@ -23,9 +26,17 @@ class FactA(Event):
     pass
 
 
-class _State(ContestState):
+class _State(StatefulContestState):
     def apply(self, fact: Event) -> None:
         pass
+
+    def reset(self) -> _State:
+        return _State(self.contestants)
+
+    def build_result(self) -> Result:
+        from tests.core.contest_test_support import EmptyResult
+
+        return EmptyResult()
 
 
 class MixinA:

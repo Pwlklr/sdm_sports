@@ -1,102 +1,210 @@
 from __future__ import annotations
 
-import uuid
-from collections.abc import Callable
-from dataclasses import replace
-from typing import TYPE_CHECKING, List, Optional
 
-from src.core.contest.command import Command
+
+import uuid
+
+from collections.abc import Iterable
+
+from dataclasses import replace
+
+from typing import TYPE_CHECKING, List
+
+
+
+from src.core.contest.command import Command, ReverseDecision
+
+from src.core.contest.contest_result import ContestResult
+from src.core.contest.contest_state import ContestState
+from src.core.contest.result import Result
+from src.core.contest.rule_set import RuleSet
+
 from src.core.contest.event import Event, EventReversed
+
 from src.core.contest.observer import Subject
 
+
+
 if TYPE_CHECKING:
+
     from src.core.contestant.models import Contestant
-    from src.core.contest.contest_state import ContestState
-    from src.core.contest.result import Result
-    from src.core.contest.result_override import ResultOverride
-    from src.core.contest.rule_set import RuleSet
+
+
+
 
 
 class Contest(Subject):
+
     """
-    Aggregate root orchestrating decide -> apply -> notify -> react for each command.
+
+    Event-sourced aggregate root.
+
+
+
+    The append-only event log (_history) is the source of truth. current_state is a
+
+    projection fold(events). New facts go through _record_event; reversal replays
+
+    the effective log via _rebuild_state().
+
     """
+
+
 
     def __init__(
+
         self,
-        contestants: List[Contestant],
-        initial_state: ContestState,
+
+        state: ContestState,
+
         ruleset: RuleSet,
+
         contest_id: str | None = None,
-        result_factory: Callable[[ContestState], Result] | None = None,
-        state_factory: Callable[[], ContestState] | None = None,
+
     ) -> None:
+
         super().__init__()
+
         self.id = contest_id or str(uuid.uuid4())
-        self.contestants = contestants
-        self.current_state = initial_state
+
+        self.current_state = state
+
         self._ruleset = ruleset
-        self._result_factory = result_factory
-        self._state_factory = state_factory
-        self.result: Optional[Result] = None
-        self.result_override: Optional[ResultOverride] = None
+
+        self.result = ContestResult()
+
         self._history: list[Event] = []
 
+
+
     @property
+
+    def contestants(self) -> List[Contestant]:
+
+        return self.current_state.contestants
+
+    @classmethod
+
+    def from_events(
+
+        cls,
+
+        state: ContestState,
+
+        ruleset: RuleSet,
+
+        events: Iterable[Event],
+
+        contest_id: str | None = None,
+
+    ) -> Contest:
+
+        """Rehydrate a contest by replaying a persisted event log."""
+
+        contest = cls(state, ruleset, contest_id=contest_id)
+
+        contest._history = list(events)
+
+        contest._rebuild_state()
+
+        return contest
+
+
+
+    @property
+
     def history(self) -> list[Event]:
+
         return self._history.copy()
 
-    @property
-    def home(self) -> Optional[Contestant]:
-        """Home side for a two-sided contest (the first listed contestant)."""
-        return self.contestants[0] if len(self.contestants) == 2 else None
+    def active_domain_events(self) -> list[Event]:
+        """Domain facts currently affecting the projection (reversal candidates)."""
+        return self._effective_domain_events()
 
-    @property
-    def away(self) -> Optional[Contestant]:
-        """Away side for a two-sided contest (the second listed contestant)."""
-        return self.contestants[1] if len(self.contestants) == 2 else None
-
-    @property
-    def official_result(self) -> Optional[Result]:
-        """The result that counts officially: an administrative override or the sporting result."""
-        if self.result_override is not None:
-            return self.result_override.result
-        return self.result
+    def get_final_result(self) -> Result:
+        if not self.current_state.is_completed:
+            raise ValueError("Match is not completed.")
+        if self.result.played is None:
+            self.result.record_played(self.current_state.build_result())
+        final = self.result.effective_result
+        if final is None:
+            raise ValueError("Match is completed but no result is available.")
+        return final
 
     def handle(self, command: Command) -> list[Event]:
+        if isinstance(command, ReverseDecision):
+            return self._handle_reversal(command)
+        return self._handle_domain_command(command)
+
+    def _handle_domain_command(self, command: Command) -> list[Event]:
         emitted: list[Event] = []
         queue: list[Event] = list(self._ruleset.decide(command, self.current_state))
 
         while queue:
             fact = queue.pop(0)
-            self.current_state.apply(fact)
-            self._history.append(fact)
+            self._record_event(fact)
             emitted.append(fact)
-            self.notify(fact)
-            self._refresh_result()
 
             for reaction in self._ruleset.react(fact, self.current_state):
                 queue.append(replace(reaction, caused_by=fact.event_id))
 
         return emitted
 
-    def reverse_event(self, event_id: str, reason: str = "reversed") -> EventReversed:
-        """Withdraw an event by appending a compensating EventReversed and rebuilding state."""
-        if self._state_factory is None:
-            raise ValueError(
-                "Cannot reverse events: this contest was created without a state_factory."
-            )
-        if not any(event.event_id == event_id for event in self._history):
-            raise ValueError(f"Event '{event_id}' is not part of this contest history.")
+    def _handle_reversal(self, command: ReverseDecision) -> list[EventReversed]:
 
-        marker = EventReversed(target_event_id=event_id, reason=reason)
-        self._history.append(marker)
+        markers = self._ruleset.decide_reversal(
+
+            command, self.current_state, self._history
+
+        )
+
+        for marker in markers:
+
+            self._record_meta_event(marker)
+
         self._rebuild_state()
-        self.notify(marker)
-        return marker
 
-    def _reversed_closure(self) -> set[str]:
-        """Ids of all events that are withdrawn: directly reversed ones plus their causal descendants."""
+        return markers
+
+
+
+    def _record_event(self, fact: Event) -> None:
+
+        self.current_state.apply(fact)
+
+        self._history.append(fact)
+
+        self.notify(fact)
+
+        self._refresh_result()
+
+
+
+    def _record_meta_event(self, fact: Event) -> None:
+
+        self._history.append(fact)
+
+        self.notify(fact)
+
+
+
+    def _rebuild_state(self) -> None:
+
+        """Replay the effective event log onto a fresh projection."""
+
+        self.current_state = self.current_state.reset()
+
+        self.result.reset_played()
+
+        for event in self._effective_domain_events():
+
+            self.current_state.apply(event)
+
+            self._refresh_result()
+
+        self.notify(None)
+
+    def _get_withdrawn_event_ids(self) -> set[str]:
         withdrawn: set[str] = {
             event.target_event_id
             for event in self._history
@@ -111,24 +219,18 @@ class Contest(Subject):
                     changed = True
         return withdrawn
 
-    def _rebuild_state(self) -> None:
-        assert self._state_factory is not None
-        withdrawn = self._reversed_closure()
-        self.current_state = self._state_factory()
-        self.result = None
-        for event in self._history:
-            if isinstance(event, EventReversed):
-                continue
-            if event.event_id in withdrawn:
-                continue
-            self.current_state.apply(event)
-            self._refresh_result()
-        self.notify(None)
+    def _effective_domain_events(self) -> list[Event]:
+        withdrawn = self._get_withdrawn_event_ids()
+        return [
+            event
+            for event in self._history
+            if not isinstance(event, EventReversed) and event.event_id not in withdrawn
+        ]
 
     def _refresh_result(self) -> None:
-        if (
-            self.current_state.is_completed
-            and self._result_factory
-            and self.result is None
-        ):
-            self.result = self._result_factory(self.current_state)
+
+        if self.current_state.is_completed and self.result.played is None:
+
+            self.result.record_played(self.current_state.build_result())
+
+

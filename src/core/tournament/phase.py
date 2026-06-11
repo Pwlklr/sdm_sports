@@ -85,10 +85,20 @@ class KnockoutPhase(TournamentPhase):
         self._winners: list[Contestant] = []
 
     def _apply_result(self, contest: Contest) -> None:
-        result = contest.official_result
-        if result is None:
+        try:
+            result = contest.get_final_result()
+        except ValueError:
             return
-        winner = result.get_winner()
+
+        from src.sports.darts.contest.darts_result import DartsResult
+        from src.sports.football.contest.football_result import FootballResult
+
+        winner = None
+        if isinstance(result, FootballResult):
+            winner = result.get_winner()
+        elif isinstance(result, DartsResult):
+            winner = result.get_winner()
+
         if winner is not None and winner not in self._winners:
             self._winners.append(winner)
 
@@ -108,8 +118,14 @@ class GroupStagePhase(TournamentPhase):
             self.standings[contestant.id] = GroupStanding(contestant=contestant)
 
     def _apply_result(self, contest: Contest) -> None:
-        result = contest.official_result
-        if result is None:
+        try:
+            result = contest.get_final_result()
+        except ValueError:
+            return
+
+        from src.sports.football.contest.football_result import FootballResult
+
+        if not isinstance(result, FootballResult):
             return
 
         sides = contest.contestants
@@ -125,19 +141,21 @@ class GroupStagePhase(TournamentPhase):
         home_row.played += 1
         away_row.played += 1
 
-        winner = result.get_winner()
-        if winner is None:
+        home_score = result.scores.get(home.id, 0)
+        away_score = result.scores.get(away.id, 0)
+
+        if home_score == away_score:
             home_row.draws += 1
             away_row.draws += 1
             home_row.points += 1
             away_row.points += 1
             return
 
-        if winner.id == home.id:
+        if home_score > away_score:
             home_row.wins += 1
             away_row.losses += 1
             home_row.points += 3
-        elif winner.id == away.id:
+        else:
             away_row.wins += 1
             home_row.losses += 1
             away_row.points += 3

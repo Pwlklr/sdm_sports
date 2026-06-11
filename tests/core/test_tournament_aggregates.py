@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import pytest
+
 from dataclasses import dataclass
 
 from src.core.contest.command import Command
-from src.core.contest import Contest
+from src.core.contest.result import Result
+from tests.core.contest_test_support import EmptyResult, StatefulContestState, make_contest
 from src.core.contest.event import Event
-from src.core.contest.contest_state import ContestState
 from src.core.contestant import IndividualPlayer
 from src.core.contest.rule_set import RuleSet
 from src.core.tournament.tournament_registration import TournamentRegistration
@@ -20,9 +23,15 @@ from src.core.tournament.event import (
 )
 
 
-class DummyState(ContestState):
+class DummyState(StatefulContestState):
     def apply(self, fact: Event) -> None:
         pass
+
+    def reset(self) -> DummyState:
+        return DummyState(self.contestants)
+
+    def build_result(self) -> Result:
+        return EmptyResult()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -68,7 +77,7 @@ def test_tournament_registration_lifecycle() -> None:
 
 def test_tournament_scheduler() -> None:
     scheduler = TournamentScheduler()
-    match = Contest([], DummyState(), DummyRuleSet())
+    match = make_contest(DummyState([]), DummyRuleSet())
 
     events = scheduler.schedule_match(match)
     assert isinstance(events[0], MatchScheduled)

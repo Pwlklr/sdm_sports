@@ -13,15 +13,10 @@ from src.sports.football.contest.commands import (
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.state import MatchPhase
 from src.sports.football.descriptor import FOOTBALL_SPORT
-from src.sports.football.football_sport_factory import FootballSportFactory
 
 
 def _adapter() -> FootballConsoleAdapter:
     return FootballConsoleAdapter()
-
-
-def _factory() -> FootballSportFactory:
-    return FootballSportFactory()
 
 
 def _match() -> object:
@@ -30,7 +25,7 @@ def _match() -> object:
     home.add_player(IndividualPlayer("Striker", "player-striker-1"))
     away.add_player(IndividualPlayer("Defender", "player-defender-2"))
     match = create_console_contest(
-        _factory(), _adapter(), [home, away], FootballMatchConfig()
+        FOOTBALL_SPORT.id, _adapter(), [home, away], FootballMatchConfig()
     )
     match.handle(StartMatch())
     return match

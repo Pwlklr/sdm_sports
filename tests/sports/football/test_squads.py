@@ -13,9 +13,8 @@ from src.sports.football.contest.commands import (
 )
 from src.sports.football.contest.discipline_carryover import accrue_suspensions
 from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.contest.football_rule_set import FootballRuleSet
-from src.sports.football.contest.squad_context import SquadContext
-from src.sports.football.football_sport_factory import FootballSportFactory
+from src.core.contest import ContestFactory
+from src.sports.football.descriptor import FOOTBALL_SPORT
 
 
 def _match(
@@ -30,7 +29,8 @@ def _match(
         home.add_player(IndividualPlayer(f"H{i}", f"h{i}"))
     for i in range(1, 3):
         away.add_player(IndividualPlayer(f"A{i}", f"a{i}"))
-    match = FootballSportFactory().create_contest(
+    match = ContestFactory.create(
+        FOOTBALL_SPORT.id,
         [home, away],
         FootballMatchConfig(
             players_on_pitch=players_on_pitch,
@@ -79,19 +79,26 @@ def test_lineup_rejects_player_not_on_roster() -> None:
 
 
 def test_lineup_rejects_suspended_player() -> None:
-    ruleset = FootballRuleSet(
+    home = Team("Home", "home")
+    away = Team("Away", "away")
+    for i in range(1, 7):
+        home.add_player(IndividualPlayer(f"H{i}", f"h{i}"))
+    for i in range(1, 3):
+        away.add_player(IndividualPlayer(f"A{i}", f"a{i}"))
+    match = ContestFactory.create(
+        FOOTBALL_SPORT.id,
+        [home, away],
         FootballMatchConfig(players_on_pitch=4),
-        squad_context=SquadContext(frozenset({"h2"})),
+        suspended_player_ids=frozenset({"h2"}),
     )
-    match = _match()
+    match.handle(StartMatch())
     with pytest.raises(CommandRejected):
-        ruleset.decide(
+        match.handle(
             SubmitLineup(
                 team_index=0,
                 starting=("h1", "h2", "h3", "h4"),
                 bench=("h5",),
-            ),
-            match.current_state,
+            )
         )
 
 

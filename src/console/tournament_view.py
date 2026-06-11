@@ -4,6 +4,8 @@ from typing import List
 
 from src.core.contest import Contest
 from src.core.tournament.phase import GroupStagePhase, TournamentPhase
+from src.sports.darts.contest.darts_result import DartsResult
+from src.sports.football.contest.football_result import FootballResult
 
 
 def active_matches(phase: TournamentPhase) -> List[Contest]:
@@ -29,17 +31,36 @@ def standings_table(phase: TournamentPhase) -> List[str]:
     return lines
 
 
+def _format_final_status(contest: Contest) -> str:
+    if not contest.current_state.is_completed:
+        return "oczekuje"
+    try:
+        result = contest.get_final_result()
+    except ValueError:
+        return "oczekuje"
+
+    if isinstance(result, FootballResult):
+        if result.was_draw:
+            return "remis"
+        winner = result.get_winner()
+        return f"wygral {winner.name}" if winner is not None else "zakonczony"
+
+    if isinstance(result, DartsResult):
+        winner = result.get_winner()
+        return f"wygral {winner.name}" if winner is not None else "zakonczony"
+
+    return "zakonczony"
+
+
 def schedule_view(phase: TournamentPhase) -> List[str]:
     lines: List[str] = []
     for index, contest in enumerate(phase.contests, start=1):
-        home = contest.home.name if contest.home is not None else "?"
-        away = contest.away.name if contest.away is not None else "?"
-        pairing = f"{home} (dom) vs {away} (wyjazd)"
-        result = contest.official_result
-        if result is None or not contest.current_state.is_completed:
-            status = "oczekuje"
+        if len(contest.contestants) == 2:
+            first, second = contest.contestants
+            pairing = f"{first.name} (dom) vs {second.name} (wyjazd)"
         else:
-            winner = result.get_winner()
-            status = f"wygral {winner.name}" if winner is not None else "remis"
+            names = " vs ".join(c.name for c in contest.contestants) or "?"
+            pairing = names
+        status = _format_final_status(contest)
         lines.append(f"{index}. {pairing} - {status}")
     return lines

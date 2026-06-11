@@ -3,13 +3,12 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from src.core.contest import Contest
 from src.core.contest.command import Command
+from src.core.contest.contest_result import ContestOutcome
 from src.core.contest.result import Result
-from src.core.contest.result_override import ContestOutcome, ResultOverride
 from src.core.contestant.models import Contestant, IndividualPlayer, Team
 from src.core.sport.console_adapter import ConsoleAdapter
 from src.core.sport.registered_sport import RegisteredSport
 from src.core.sport.sport_descriptor import SportDescriptor
-from src.core.sport.sport_factory import SportFactory
 from src.core.sport.sport_plugin import SportPlugin
 from src.core.tournament import Tournament
 from src.core.tournament.event import MatchScheduled
@@ -29,13 +28,12 @@ class SportsSystemEngine:
 
     def register_plugin(self, plugin: SportPlugin) -> None:
         self._sports[plugin.descriptor.id] = RegisteredSport(
-            plugin.descriptor, plugin.factory, plugin.adapter
+            plugin.descriptor, plugin.adapter
         )
 
     def register_sport(
         self,
         descriptor: SportDescriptor,
-        factory: SportFactory,
         adapter: ConsoleAdapter,
     ) -> None:
         if adapter.descriptor != descriptor:
@@ -43,17 +41,13 @@ class SportsSystemEngine:
                 f"Adapter descriptor '{adapter.descriptor.id}' does not match "
                 f"registered sport '{descriptor.id}'."
             )
-        self._sports[descriptor.id] = RegisteredSport(descriptor, factory, adapter)
+        self._sports[descriptor.id] = RegisteredSport(descriptor, adapter)
 
     def get_available_sports(self) -> List[RegisteredSport]:
         return list(self._sports.values())
 
     def get_sport(self, sport_id: str) -> Optional[RegisteredSport]:
         return self._sports.get(sport_id)
-
-    def get_factory(self, sport_id: str) -> Optional[SportFactory]:
-        sport = self._sports.get(sport_id)
-        return sport.factory if sport else None
 
     def get_adapter(self, sport_id: str) -> Optional[ConsoleAdapter]:
         sport = self._sports.get(sport_id)
@@ -126,7 +120,7 @@ class SportsSystemEngine:
     def setup_tournament(
         self,
         tournament: Tournament,
-        factory: SportFactory,
+        sport_id: str,
         config: Any,
         contestants: List[Contestant],
     ) -> List[MatchScheduled]:
@@ -134,7 +128,7 @@ class SportsSystemEngine:
         for contestant in contestants:
             tournament.register_player(contestant)
 
-        events = tournament.close_registration(factory, config)
+        events = tournament.close_registration(sport_id, config)
         return [event for event in events if isinstance(event, MatchScheduled)]
 
     def complete_tournament_match(self, tournament: Tournament, match_id: str) -> None:
@@ -148,12 +142,13 @@ class SportsSystemEngine:
     ) -> None:
         """Set the official result outside the event log (walkover, commission, forfeit, etc.).
 
-        The played ``Contest.result``, state and history are preserved unchanged.
+        The played outcome stays on ``Contest.result.played``; ``Contest.result`` delegates
+        to the override for all official reads.
         """
         match = self.active_matches.get(match_id) or self.archived_matches.get(match_id)
         if match is None:
             raise ValueError(f"Match with ID '{match_id}' not found.")
-        match.result_override = ResultOverride(result=result, reason=reason)
+        match.result.apply_override(result, reason)
 
     def award_walkover(
         self, match_id: str, winner: Optional[Contestant], reason: str = "walkover"

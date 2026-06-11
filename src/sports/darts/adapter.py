@@ -1,11 +1,20 @@
 from typing import Optional
 
 from src.core.contest import Contest
-from src.core.contest.command import Command
+from src.core.contest.command import Command, ReverseDecision
+from src.core.console.reversal_catalog import (
+    parse_reversal_choice,
+    print_reversal_menu,
+    resolve_catalog_choice,
+)
 from src.core.sport.console_adapter import ConsoleAdapter
 from src.core.sport.sport_descriptor import SportDescriptor
 from src.sports.darts.console.darts_console_view import DartsConsoleView
 from src.sports.darts.console.darts_timeline import print_darts_timeline
+from src.sports.darts.console.reversal_catalog import (
+    build_darts_reversal_catalog,
+    darts_reverse_command,
+)
 from src.sports.darts.contest.commands import CallOcheFault, StartMatch, ThrowDart
 from src.sports.darts.contest.darts_contest_state import DartsContestState
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig
@@ -54,7 +63,7 @@ class DartsConsoleAdapter(ConsoleAdapter):
         contest.attach(DartsConsoleView())
 
     def get_input_prompt(self, contest: Contest) -> str:
-        return "Action ('<sector> <mult>', '0', 'fault', 'log', 'suspend')"
+        return "Action ('<sector> <mult>', '0', 'fault', 'log', 'reverse [nr]', 'suspend')"
 
     def parse_command(self, user_input: str, contest: Contest) -> Optional[Command]:
         cleaned = user_input.strip().lower()
@@ -62,6 +71,9 @@ class DartsConsoleAdapter(ConsoleAdapter):
         if cleaned == "log":
             print_darts_timeline(contest)
             return None
+
+        if cleaned.split()[0] in {"reverse", "rev"}:
+            return self._parse_reversal_command(cleaned, contest)
 
         if cleaned == "fault":
             return CallOcheFault()
@@ -90,8 +102,42 @@ class DartsConsoleAdapter(ConsoleAdapter):
             except ValueError:
                 pass
 
-        print("❌ Invalid syntax. Enter 'sector mult' (e.g., '20 3'), '0' or 'fault'.")
+        print(
+            "❌ Invalid syntax. Enter 'sector mult' (e.g., '20 3'), "
+            "'0', 'fault', or 'reverse [nr]'."
+        )
         return None
+
+    def _parse_reversal_command(
+        self, cleaned: str, contest: Contest
+    ) -> Optional[ReverseDecision]:
+        state = contest.current_state
+        if not isinstance(state, DartsContestState):
+            return None
+
+        catalog = build_darts_reversal_catalog(contest, state)
+        parts = cleaned.split()
+
+        if len(parts) == 1:
+            print_reversal_menu(
+                catalog,
+                title="Zdarzenia do wycofania",
+                usage="reverse <numer>",
+            )
+            return None
+
+        choice = parse_reversal_choice(parts)
+        if choice is None:
+            print("❌ Uzycie: reverse <numer>")
+            return None
+
+        option = resolve_catalog_choice(catalog, choice)
+        if option is None:
+            print(f"❌ Zdarzenie numer '{parts[1]}' nie istnieje.")
+            return None
+
+        print(f"✅ Wycofano zdarzenie nr {choice}.")
+        return darts_reverse_command(option.event_id)
 
     def get_start_command(self) -> Optional[Command]:
         return StartMatch()

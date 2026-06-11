@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, ClassVar, Dict, List, Optional
+from typing import ClassVar, Dict, List, Optional
 
 from src.core.contest.event import Event
 from src.core.contest.contest_state import ContestState
+from src.core.contest.result import Result
+from src.sports.darts.contest.darts_match_config import DartsMatchConfig
 from src.sports.darts.contest.entities import DartThrow, DartTurn
 from src.sports.darts.contest.events import (
     Busted,
@@ -17,9 +19,7 @@ from src.sports.darts.contest.events import (
     TurnEnded,
 )
 
-if TYPE_CHECKING:
-    from src.core.contestant import Contestant
-    from src.sports.darts.contest.darts_match_config import DartsMatchConfig
+from src.core.contestant.models import Contestant, IndividualPlayer
 
 
 class DartsContestState(ContestState):
@@ -30,44 +30,35 @@ class DartsContestState(ContestState):
     def __init__(
         self,
         players: List[Contestant],
-        config: Optional[DartsMatchConfig] = None,
-        starting_score: int = 501,
-        sets_to_win: int = 3,
-        legs_to_win_set: int = 3,
+        config: DartsMatchConfig,
     ) -> None:
         super().__init__()
         if not players:
             raise ValueError("A match requires at least one contestant.")
+        for player in players:
+            if not isinstance(player, IndividualPlayer):
+                raise ValueError("Darts matches require IndividualPlayer contestants.")
 
         self.players = players
         self.config = config
 
-        if config:
-            self.starting_score = config.starting_score
-            self.sets_to_win = config.sets_to_win_match
-            self.legs_to_win_set = config.legs_to_win_set
-            self.in_multiplier = config.in_multiplier
-            self.out_multiplier = config.out_multiplier
-            self.darts_per_turn = config.darts_per_turn
-        else:
-            self.starting_score = starting_score
-            self.sets_to_win = sets_to_win
-            self.legs_to_win_set = legs_to_win_set
-            self.in_multiplier = 1
-            self.out_multiplier = 2
-            self.darts_per_turn = 3
-
-        self.scores: Dict[str, int] = {p.id: self.starting_score for p in players}
+        self.scores: Dict[str, int] = {
+            p.id: config.starting_score for p in players
+        }
         self.legs_won: Dict[str, int] = {p.id: 0 for p in players}
         self.sets_won: Dict[str, int] = {p.id: 0 for p in players}
 
         self.leg_starting_player_idx: int = 0
         self.current_player_idx: int = 0
         self.current_turn: Optional[DartTurn] = None
-        self.turn_starting_score: int = self.starting_score
+        self.turn_starting_score: int = config.starting_score
         self.match_started: bool = False
         self.is_completed: bool = False
         self.winner_id: Optional[str] = None
+
+    @property
+    def contestants(self) -> list[Contestant]:
+        return list(self.players)
 
     @property
     def current_player(self) -> Contestant:
@@ -95,6 +86,19 @@ class DartsContestState(ContestState):
         handler = self._appliers.get(type(fact))
         if handler:
             handler(self, fact)
+
+    def reset(self) -> DartsContestState:
+        return DartsContestState(list(self.players), self.config)
+
+    def build_result(self) -> Result:
+        from src.sports.darts.contest.darts_result import DartsResult
+
+        winner = self.player_by_id(self.winner_id) if self.winner_id else None
+        return DartsResult(
+            winner=winner,
+            sets_won=self.sets_won,
+            legs_won=self.legs_won,
+        )
 
 
 def _apply_match_started(state: DartsContestState, fact: Event) -> None:
@@ -135,7 +139,7 @@ def _apply_set_won(state: DartsContestState, fact: Event) -> None:
 def _apply_leg_started(state: DartsContestState, fact: Event) -> None:
     assert isinstance(fact, LegStarted)
     for player in state.players:
-        state.scores[player.id] = state.starting_score
+        state.scores[player.id] = state.config.starting_score
     for idx, player in enumerate(state.players):
         if player.id == fact.starting_player_id:
             state.leg_starting_player_idx = idx

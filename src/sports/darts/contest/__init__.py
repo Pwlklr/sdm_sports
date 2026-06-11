@@ -11,7 +11,7 @@ from src.sports.darts.contest.events import (
     SetWon,
     TurnEnded,
 )
-from src.sports.darts.contest.darts_result import DartsResult, build_darts_result
+from src.sports.darts.contest.darts_result import DartsResult
 from src.sports.darts.contest.darts_rule_set import DartsRuleSet
 from src.sports.darts.contest.darts_contest_state import DartsContestState
 
@@ -33,5 +33,4 @@ __all__ = [
     "StartMatch",
     "ThrowDart",
     "TurnEnded",
-    "build_darts_result",
 ]

@@ -15,7 +15,7 @@ def _state() -> FootballContestState:
 
 def test_requires_two_sides() -> None:
     with pytest.raises(ValueError):
-        FootballContestState([Team("Solo", "solo")])
+        FootballContestState([Team("Solo", "solo")], FootballMatchConfig())
 
 
 def test_opponent_resolution() -> None:

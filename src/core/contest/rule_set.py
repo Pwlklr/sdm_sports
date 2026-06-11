@@ -4,8 +4,13 @@ from abc import ABC
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 
-from src.core.contest.command import Command
-from src.core.contest.event import Event
+from src.core.contest.command import Command, ReverseDecision
+from src.core.contest.event import Event, EventReversed
+from src.core.contest.reversal_chain import (
+    ReversalContext,
+    ReversalHandler,
+    default_reversal_chain,
+)
 
 if TYPE_CHECKING:
     from src.core.contest.contest_state import ContestState
@@ -25,6 +30,11 @@ class RuleSet(ABC):
 
     command_handlers: ClassVar[dict[type[Command], Handler]] = {}
     reaction_handlers: ClassVar[dict[type[Event], Handler]] = {}
+
+    def __init__(
+        self, reversal_chain: ReversalHandler | None = None
+    ) -> None:
+        self._reversal_chain = reversal_chain or default_reversal_chain()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -60,6 +70,20 @@ class RuleSet(ABC):
         if handler:
             return handler(self, fact, state)
         return []
+
+    def decide_reversal(
+        self,
+        command: ReverseDecision,
+        state: ContestState,
+        history: list[Event],
+    ) -> list[EventReversed]:
+        ctx = ReversalContext(
+            command=command,
+            state=state,
+            history=history,
+        )
+        self._reversal_chain.handle(ctx)
+        return ctx.markers
 
 
 Handler: TypeAlias = Callable[..., list[Event]]

@@ -36,10 +36,10 @@ class DartsConsoleView(Observer):
             print("🏆 MATCH CONCLUDED 🏆".center(45))
         elif state.current_turn:
             throws_in_turn = len(state.current_turn.throws)
-            if throws_in_turn < state.darts_per_turn:
+            if throws_in_turn < state.config.darts_per_turn:
                 print(
                     f"Turn: {state.current_player.name} "
-                    f"(Dart {throws_in_turn + 1} of {state.darts_per_turn})"
+                    f"(Dart {throws_in_turn + 1} of {state.config.darts_per_turn})"
                 )
 
         print("=" * 45)

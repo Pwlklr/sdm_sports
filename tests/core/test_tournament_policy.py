@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 
-from src.core.contest import Contest
+from src.core.contest.result import Result
+from tests.core.contest_test_support import EmptyResult, StatefulContestState, make_contest
 from src.core.contest.command import Command
-from src.core.contest.contest_state import ContestState
 from src.core.contest.event import Event
 from src.core.contest.rule_set import RuleSet
 from src.core.contestant.models import IndividualPlayer
@@ -22,10 +24,16 @@ class EndFact(Event):
     pass
 
 
-class DummyState(ContestState):
+class DummyState(StatefulContestState):
     def apply(self, fact: Event) -> None:
         if isinstance(fact, EndFact):
             self.is_completed = True
+
+    def reset(self) -> DummyState:
+        return DummyState(self.contestants)
+
+    def build_result(self) -> Result:
+        return EmptyResult()
 
 
 class DummyRuleSet(RuleSet):
@@ -44,7 +52,7 @@ def test_policy_advances_phase_when_complete() -> None:
     tournament.add_phase(phase)
     phase.initialize_standings([p1, p2])
 
-    match = Contest([p1, p2], DummyState(), DummyRuleSet())
+    match = make_contest(DummyState([p1, p2]), DummyRuleSet())
     phase.add_contest(match)
     match.handle(EndCommand())
 

@@ -7,7 +7,8 @@ from src.sports.football.contest.commands import CommitFoul, ScoreGoal, StartMat
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.football_rule_set import FootballRuleSet
 from src.sports.football.contest.state import FootballContestState
-from src.sports.football.football_sport_factory import FootballSportFactory
+from src.core.contest import ContestFactory
+from src.sports.football.descriptor import FOOTBALL_SPORT
 
 
 def _started_contest() -> Contest:
@@ -15,7 +16,7 @@ def _started_contest() -> Contest:
     away = Team("Away", "away")
     home.add_player(IndividualPlayer("P9", "p9"))
     away.add_player(IndividualPlayer("Other", "other"))
-    contest = FootballSportFactory().create_contest([home, away], FootballMatchConfig())
+    contest = ContestFactory.create(FOOTBALL_SPORT.id, [home, away], FootballMatchConfig())
     contest.handle(StartMatch())
     return contest
 

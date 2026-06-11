@@ -8,17 +8,17 @@ from src.sports.football.contest.commands import (
     TakePenaltyKick,
 )
 from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.football_sport_factory import FootballSportFactory
+from src.core.contest import ContestFactory
+from src.sports.football.descriptor import FOOTBALL_SPORT
 from src.sports.football.contest.state import MatchPhase
 
 
 def _contest() -> Contest:
-    factory = FootballSportFactory()
     home = Team("Home", "home")
     away = Team("Away", "away")
     home.add_player(IndividualPlayer("Striker", "player-home-1"))
     away.add_player(IndividualPlayer("Defender", "x"))
-    return factory.create_contest([home, away], FootballMatchConfig())
+    return ContestFactory.create(FOOTBALL_SPORT.id, [home, away], FootballMatchConfig())
 
 
 def test_start_command_kicks_off() -> None:

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar, Dict, List, Optional
 
 from src.core.contest.event import Event
 from src.core.contest.contest_state import ContestState
+from src.core.contest.result import Result
 from src.sports.football.contest.entities import (
     DisciplinaryRecord,
     Goal,
@@ -28,10 +29,10 @@ from src.sports.football.contest.events import (
     PlayerSubstituted,
 )
 
+from src.core.contestant.models import Contestant, Team
+from src.sports.football.contest.football_match_config import FootballMatchConfig
+
 if TYPE_CHECKING:
-    from src.core.contestant import Contestant
-    from src.core.contestant.models import Team
-    from src.sports.football.contest.football_match_config import FootballMatchConfig
     from src.sports.football.contest.roster_status import PlayerRosterStatus
 
 
@@ -52,42 +53,22 @@ class FootballContestState(ContestState):
     def __init__(
         self,
         teams: List[Contestant],
-        config: Optional[FootballMatchConfig] = None,
-        number_of_halves: int = 2,
-        half_length_minutes: int = 45,
-        allow_draw: bool = True,
+        config: FootballMatchConfig,
+        *,
+        suspended_player_ids: frozenset[str] | None = None,
     ) -> None:
         super().__init__()
         if len(teams) != 2:
             raise ValueError("A football match requires exactly two sides.")
+        for side in teams:
+            if not isinstance(side, Team):
+                raise ValueError("Football matches require Team contestants.")
 
         self.teams = teams
         self.config = config
-
-        if config:
-            self.number_of_halves = config.number_of_halves
-            self.half_length_minutes = config.half_length_minutes
-            self.allow_draw = config.allow_draw
-            self.extra_time_halves = config.extra_time_halves
-            self.extra_time_half_length = config.extra_time_half_length
-            self.penalty_shootout_rounds = config.penalty_shootout_rounds
-            self.yellows_per_dismissal = config.yellows_per_dismissal
-            self.golden_goal = config.golden_goal
-            self.players_on_pitch = config.players_on_pitch
-            self.min_players_on_pitch = config.min_players_on_pitch
-            self.max_substitutions = config.max_substitutions
-        else:
-            self.number_of_halves = number_of_halves
-            self.half_length_minutes = half_length_minutes
-            self.allow_draw = allow_draw
-            self.extra_time_halves = 2
-            self.extra_time_half_length = 15
-            self.penalty_shootout_rounds = 5
-            self.yellows_per_dismissal = 2
-            self.golden_goal = False
-            self.players_on_pitch = 11
-            self.min_players_on_pitch = 7
-            self.max_substitutions = 5
+        self.suspended_player_ids: frozenset[str] = (
+            suspended_player_ids if suspended_player_ids is not None else frozenset()
+        )
 
         self.scores: Dict[str, int] = {t.id: 0 for t in teams}
         self.lineups: Dict[str, MatchLineup] = {}
@@ -106,6 +87,10 @@ class FootballContestState(ContestState):
         self.is_completed: bool = False
 
     @property
+    def contestants(self) -> list[Contestant]:
+        return list(self.teams)
+
+    @property
     def current_period(self) -> Optional[MatchPeriod]:
         if 0 <= self.current_period_idx < len(self.periods):
             return self.periods[self.current_period_idx]
@@ -116,6 +101,10 @@ class FootballContestState(ContestState):
             if team.id == team_id:
                 return team
         return None
+
+    def is_suspended(self, player_id: str) -> bool:
+        """Tournament-level suspension carried into this match (not in-match cards)."""
+        return player_id in self.suspended_player_ids
 
     def lineup_for(self, team_id: str) -> Optional[MatchLineup]:
         return self.lineups.get(team_id)
@@ -137,9 +126,9 @@ class FootballContestState(ContestState):
 
     def _start_period(self, kind: PeriodKind, index: int) -> None:
         length = (
-            self.half_length_minutes
+            self.config.half_length_minutes
             if kind == PeriodKind.REGULAR
-            else self.extra_time_half_length
+            else self.config.extra_time_half_length
         )
         period = MatchPeriod(index=index, length_minutes=length, kind=kind)
         self.periods.append(period)
@@ -166,6 +155,23 @@ class FootballContestState(ContestState):
         handler = self._appliers.get(type(fact))
         if handler:
             handler(self, fact)
+
+    def reset(self) -> FootballContestState:
+        return FootballContestState(
+            list(self.teams),
+            self.config,
+            suspended_player_ids=self.suspended_player_ids,
+        )
+
+    def build_result(self) -> Result:
+        from src.sports.football.contest.football_result import FootballResult
+
+        return FootballResult(
+            winner=self.winner,
+            scores=self.scores,
+            was_draw=self.was_draw,
+            decided_by=self.decided_by,
+        )
 
 
 def _apply_match_started(state: FootballContestState, fact: Event) -> None:

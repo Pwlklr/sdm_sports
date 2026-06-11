@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, List, Optional
 
 from src.core.contest.contest import Contest
+from src.core.contest.contest_factory import ContestFactory
 from src.core.contestant.models import Contestant
 from src.core.tournament.tournament_disciplinary_board import (
     TournamentDisciplinaryBoard,
@@ -84,7 +85,7 @@ class Tournament:
 
     def schedule_phase_fixtures(
         self,
-        factory: Any,
+        sport_id: str,
         config: Any,
         contestants: list[Contestant] | None = None,
     ) -> list[TournamentEvent]:
@@ -98,7 +99,7 @@ class Tournament:
 
         emitted: list[TournamentEvent] = []
         for side_a, side_b in phase.get_matchups(pool):
-            match = factory.create_contest([side_a, side_b], config)
+            match = ContestFactory.create(sport_id, [side_a, side_b], config)
             phase.add_contest(match)
             emitted.extend(self.scheduler.schedule_match(match))
         return emitted
@@ -118,7 +119,7 @@ class Tournament:
 
     def close_registration(
         self,
-        factory: Any,
+        sport_id: str,
         config: Any,
     ) -> list[TournamentEvent]:
         events = self.registration.close_registration()
@@ -126,14 +127,14 @@ class Tournament:
         for event in events:
             emitted.extend(self.handle(event))
 
-        schedule_events = self.schedule_phase_fixtures(factory, config)
+        schedule_events = self.schedule_phase_fixtures(sport_id, config)
         for scheduled in schedule_events:
             self.handle(scheduled)
             emitted.append(scheduled)
         return emitted
 
     def complete_match(self, match: Contest) -> list[TournamentEvent]:
-        return self.handle(MatchCompleted(match, match.official_result))
+        return self.handle(MatchCompleted(match, match.result))
 
     def advance_to_next_phase(self) -> None:
         self.state.advance_phase()

@@ -37,7 +37,6 @@ from src.sports.football.contest.roster import (
     player_name_for_id,
     player_on_team,
 )
-from src.sports.football.contest.squad_context import SquadContext
 from src.sports.football.contest.state import FootballContestState, MatchPhase
 
 
@@ -103,7 +102,7 @@ class FootballCoreRules:
         self, fact: PeriodEnded, state: FootballContestState
     ) -> list[Event]:
         if state.phase == MatchPhase.REGULATION:
-            if state.count_periods(PeriodKind.REGULAR) < state.number_of_halves:
+            if state.count_periods(PeriodKind.REGULAR) < state.config.number_of_halves:
                 return [
                     PeriodStarted(
                         kind=PeriodKind.REGULAR,
@@ -113,7 +112,7 @@ class FootballCoreRules:
             return _after_regulation(state)
 
         if state.phase == MatchPhase.EXTRA_TIME:
-            if state.count_periods(PeriodKind.EXTRA_TIME) < state.extra_time_halves:
+            if state.count_periods(PeriodKind.EXTRA_TIME) < state.config.extra_time_halves:
                 return [
                     PeriodStarted(
                         kind=PeriodKind.EXTRA_TIME,
@@ -180,7 +179,7 @@ class FootballDisciplineRules:
             return []
         if (
             state.disciplinary.yellows_for(fact.offender_id)
-            >= state.yellows_per_dismissal
+            >= state.config.yellows_per_dismissal
         ):
             return [
                 PlayerDismissed(
@@ -197,7 +196,7 @@ class FootballDisciplineRules:
         if state.is_completed:
             return []
         remaining = state.active_players_on_pitch(fact.team_id)
-        if remaining >= state.min_players_on_pitch:
+        if remaining >= state.config.min_players_on_pitch:
             return []
         team = state.team_by_id(fact.team_id)
         if team is None:
@@ -236,7 +235,7 @@ class FootballKnockoutRules:
     def react_goal_scored(
         self, fact: GoalScored, state: FootballContestState
     ) -> list[Event]:
-        if state.phase != MatchPhase.EXTRA_TIME or not state.golden_goal:
+        if state.phase != MatchPhase.EXTRA_TIME or not state.config.golden_goal:
             return []
         leader = state.leading_team()
         if leader is None:
@@ -275,8 +274,6 @@ class FootballKnockoutRules:
 class FootballSquadRules:
     """Lineups, bench and substitutions, including tournament suspension checks."""
 
-    _squad_context: SquadContext
-
     def decide_submit_lineup(
         self, command: SubmitLineup, state: FootballContestState
     ) -> list[Event]:
@@ -296,20 +293,20 @@ class FootballSquadRules:
             reject("Powtorzony zawodnik w zgloszonym skladzie.")
         if set(starting) & set(bench):
             reject("Zawodnik nie moze byc jednoczesnie w skladzie i na lawce.")
-        if len(starting) > state.players_on_pitch:
+        if len(starting) > state.config.players_on_pitch:
             reject(
-                f"Sklad podstawowy moze liczyc maksymalnie {state.players_on_pitch} zawodnikow."
+                f"Sklad podstawowy moze liczyc maksymalnie {state.config.players_on_pitch} zawodnikow."
             )
-        if len(starting) < state.players_on_pitch:
+        if len(starting) < state.config.players_on_pitch:
             reject(
-                f"Sklad podstawowy musi liczyc co najmniej {state.players_on_pitch} zawodnikow "
+                f"Sklad podstawowy musi liczyc co najmniej {state.config.players_on_pitch} zawodnikow "
                 f"(obecnie {len(starting)})."
             )
         for player_id in starting + bench:
             if not player_on_team(team, player_id):
                 name = player_name_for_id(state, player_id) or player_id
                 reject(f"Zawodnik {name} nie nalezy do druzyny {team.name}.")
-            if self._squad_context.is_suspended(player_id):
+            if state.is_suspended(player_id):
                 name = player_name_for_id(state, player_id) or player_id
                 reject(f"Zawodnik {name} jest zawieszony i nie moze byc zgloszony.")
 
@@ -340,8 +337,8 @@ class FootballSquadRules:
             reject("Nie mozna zmienic zawodnika, ktory zostal wykluczony.")
         if not lineup.is_on_bench(command.player_in):
             reject("Zawodnik wchodzacy nie znajduje sie na lawce rezerwowych.")
-        if lineup.subs_made >= state.max_substitutions:
-            reject(f"Limit zmian ({state.max_substitutions}) zostal osiagniety.")
+        if lineup.subs_made >= state.config.max_substitutions:
+            reject(f"Limit zmian ({state.config.max_substitutions}) zostal osiagniety.")
 
         return [
             PlayerSubstituted(
@@ -368,10 +365,10 @@ class FootballRuleSet(
     def __init__(
         self,
         config: FootballMatchConfig,
-        squad_context: SquadContext | None = None,
+        reversal_chain=None,
     ) -> None:
+        super().__init__(reversal_chain=reversal_chain)
         self._config = config
-        self._squad_context = squad_context or SquadContext()
 
 
 def _valid_minute(minute: int, state: FootballContestState) -> bool:
@@ -379,7 +376,7 @@ def _valid_minute(minute: int, state: FootballContestState) -> bool:
 
 
 def _after_regulation(state: FootballContestState) -> list[Event]:
-    if not state.is_draw or state.allow_draw:
+    if not state.is_draw or state.config.allow_draw:
         winner = state.leading_team()
         return [
             MatchConcluded(
@@ -389,7 +386,7 @@ def _after_regulation(state: FootballContestState) -> list[Event]:
             )
         ]
 
-    if state.extra_time_halves > 0:
+    if state.config.extra_time_halves > 0:
         return [
             ExtraTimeStarted(),
             PeriodStarted(kind=PeriodKind.EXTRA_TIME, index=0),
@@ -419,7 +416,7 @@ def _shootout_winner(state: FootballContestState) -> Contestant | None:
     attempts_b = state.penalty_attempts[second.id]
     score_a = state.penalty_scores[first.id]
     score_b = state.penalty_scores[second.id]
-    rounds = state.penalty_shootout_rounds
+    rounds = state.config.penalty_shootout_rounds
 
     if attempts_a <= rounds and attempts_b <= rounds:
         remaining_a = max(rounds - attempts_a, 0)

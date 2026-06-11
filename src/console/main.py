@@ -26,8 +26,6 @@ from src.sports.darts.contest.darts_contest_state import DartsContestState
 from src.sports.football.descriptor import FOOTBALL_SPORT
 from src.sports.football.plugin import FOOTBALL_PLUGIN
 from src.sports.football.contest.discipline_carryover import accrue_suspensions
-from src.sports.football.contest.football_rule_set import FootballRuleSet
-from src.sports.football.contest.squad_context import SquadContext
 from src.sports.football.contest.state import FootballContestState
 
 
@@ -329,11 +327,9 @@ def play_tournament_match(
 
 def _apply_suspension_context(tournament: Tournament, match: Contest) -> None:
     """Feed current tournament suspensions into a football match before it starts."""
-    if not isinstance(match.current_state, FootballContestState):
-        return
-    ruleset = match._ruleset
-    if isinstance(ruleset, FootballRuleSet):
-        ruleset._squad_context = SquadContext(
+    state = match.current_state
+    if isinstance(state, FootballContestState):
+        state.suspended_player_ids = frozenset(
             tournament.disciplinary_board.suspended_ids()
         )
 
@@ -423,7 +419,7 @@ def main() -> None:
             try:
                 config = sport.adapter.collect_config()
                 match = create_console_contest(
-                    sport.factory, sport.adapter, selected, config
+                    sport.descriptor.id, sport.adapter, selected, config
                 )
             except ValueError as e:
                 print(f"❌ {e}")
@@ -466,7 +462,7 @@ def main() -> None:
             tournament.add_phase(phase)
 
             scheduled = engine.setup_tournament(
-                tournament, sport.factory, config, selected
+                tournament, sport.descriptor.id, config, selected
             )
 
             print(f"\n🏆 --- {t_name.upper()} BRACKET GENERATED --- 🏆")
@@ -544,7 +540,7 @@ def main() -> None:
                     desc = " vs ".join([pl.name for pl in state.players])
                     print(f"\nMatch: {desc} (ID: {mid[:8]})")
                     print(
-                        f"Format: {state.starting_score} Up | Best of {state.sets_to_win} Sets"
+                        f"Format: {state.config.starting_score} Up | Best of {state.config.sets_to_win_match} Sets"
                     )
                     print("Final Scoreboard:")
                     for pl in state.players:
@@ -560,12 +556,24 @@ def main() -> None:
                         if state.was_draw
                         else f"{state.winner.name if state.winner else '?'} ({via})"
                     )
-                    if m.result_override is not None:
-                        override = m.result_override
-                        official_winner = override.result.get_winner()
-                        winner_name = official_winner.name if official_winner else "?"
+                    if m.result.is_overridden:
+                        from src.core.contest.contest_result import ContestOutcome
+                        from src.sports.football.contest.football_result import (
+                            FootballResult,
+                        )
+
+                        official = m.result.effective_result
+                        if isinstance(official, FootballResult) and official.was_draw:
+                            winner_name = "Remis"
+                        elif isinstance(official, ContestOutcome) and official.was_draw:
+                            winner_name = "Remis"
+                        else:
+                            official_winner = official.get_winner()
+                            winner_name = (
+                                official_winner.name if official_winner else "?"
+                            )
                         print(
-                            f"Official Result: {winner_name} ({override.reason})"
+                            f"Official Result: {winner_name} ({m.result.override_reason})"
                         )
                         print(f"Played Result: {outcome}")
                     else:

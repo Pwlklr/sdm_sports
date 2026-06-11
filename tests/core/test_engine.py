@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import pytest
+
 from dataclasses import dataclass
 
 from src.core.contest.command import Command
-from src.core.contest import Contest
+from src.core.contest.result import Result
+from tests.core.contest_test_support import EmptyResult, StatefulContestState, make_contest
 from src.core.contest.event import Event
-from src.core.contest.contest_state import ContestState
 from src.core.system.sports_system_engine import SportsSystemEngine
 from src.core.contest.rule_set import RuleSet
 
@@ -19,9 +22,15 @@ class DummyFact(Event):
     pass
 
 
-class DummyState(ContestState):
+class DummyState(StatefulContestState):
     def apply(self, fact: Event) -> None:
         pass
+
+    def reset(self) -> DummyState:
+        return DummyState(self.contestants)
+
+    def build_result(self) -> Result:
+        return EmptyResult()
 
 
 class DummyRuleSet(RuleSet):
@@ -59,7 +68,7 @@ def test_engine_tournament_management() -> None:
 
 def test_engine_match_dispatch() -> None:
     engine = SportsSystemEngine()
-    match = Contest([], DummyState(), DummyRuleSet())
+    match = make_contest(DummyState([]), DummyRuleSet())
     engine.register_active_match(match)
 
     engine.dispatch_match_command(match.id, DummyCommand())
@@ -71,7 +80,7 @@ def test_engine_match_dispatch() -> None:
 
 def test_engine_archiving() -> None:
     engine = SportsSystemEngine()
-    match = Contest([], DummyState(), DummyRuleSet())
+    match = make_contest(DummyState([]), DummyRuleSet())
     engine.register_active_match(match)
 
     engine.archive_match(match.id)
