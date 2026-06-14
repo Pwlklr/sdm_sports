@@ -1,4 +1,5 @@
 import sys
+from dataclasses import replace
 from typing import List
 
 from src.core.contest import Contest
@@ -76,7 +77,7 @@ def match_loop(
         print("❌ Match not found in active memory!")
         return
 
-    while not match.current_state.is_completed:
+    while not match.current_state.is_finished:
         prompt_text = adapter.get_input_prompt(match)
         cmd_input = input(f">> {prompt_text}: ").strip().lower()
 
@@ -93,7 +94,7 @@ def match_loop(
             except ValueError as e:
                 print(f"⚠️ System Error: {e}")
 
-    if match.current_state.is_completed:
+    if match.current_state.is_finished:
         print("\n🎉 Match Complete!")
 
 
@@ -316,7 +317,7 @@ def play_tournament_match(
 
     match_loop(engine, match.id, adapter)
 
-    if not match.current_state.is_completed:
+    if not match.current_state.is_finished:
         print("\n⏸️ Match suspended. You can resume it later from this menu.")
         return
 
@@ -329,15 +330,17 @@ def _apply_suspension_context(tournament: Tournament, match: Contest) -> None:
     """Feed current tournament suspensions into a football match before it starts."""
     state = match.current_state
     if isinstance(state, FootballContestState):
-        state.suspended_player_ids = frozenset(
-            tournament.disciplinary_board.suspended_ids()
+        match.current_state = state.with_tournament_context(
+            suspended_player_ids=frozenset(
+                tournament.disciplinary_board.suspended_ids()
+            )
         )
 
 
 def _carry_over_discipline(tournament: Tournament, match: Contest) -> None:
     """After a football match, accrue cards into tournament-wide suspensions."""
-    if isinstance(match.current_state, FootballContestState):
-        accrue_suspensions(tournament.disciplinary_board, match.current_state)
+    if match.current_state.is_finished:
+        accrue_suspensions(tournament.disciplinary_board, match.get_final_result())
 
 
 def run_tournament_matches(
@@ -557,21 +560,23 @@ def main() -> None:
                         else f"{state.winner.name if state.winner else '?'} ({via})"
                     )
                     if m.result.is_overridden:
-                        from src.core.contest.contest_result import ContestOutcome
-                        from src.sports.football.contest.football_result import (
-                            FootballResult,
+                        from src.core.tournament.ranking import (
+                            describe_two_way_result,
+                            single_first_place,
                         )
 
                         official = m.result.effective_result
-                        if isinstance(official, FootballResult) and official.was_draw:
-                            winner_name = "Remis"
-                        elif isinstance(official, ContestOutcome) and official.was_draw:
-                            winner_name = "Remis"
+                        if official is None:
+                            winner_name = "?"
                         else:
-                            official_winner = official.get_winner()
-                            winner_name = (
-                                official_winner.name if official_winner else "?"
-                            )
+                            label = describe_two_way_result(official.ranking())
+                            if label == "remis":
+                                winner_name = "Remis"
+                            elif label.startswith("wygral "):
+                                winner_name = label.removeprefix("wygral ")
+                            else:
+                                winner = single_first_place(official.ranking())
+                                winner_name = winner.name if winner else "?"
                         print(
                             f"Official Result: {winner_name} ({m.result.override_reason})"
                         )

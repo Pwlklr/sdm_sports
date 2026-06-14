@@ -4,11 +4,15 @@ from dataclasses import dataclass
 
 from src.core.contest import Contest, ContestFactory
 from src.core.contest.command import Command
+from src.core.contest.contest_factory import ContestAssembly
 from src.core.contest.event import Event
 from src.core.contestant import IndividualPlayer
-from src.core.contest.result import Result
 from src.core.contest.rule_set import RuleSet
-from tests.core.contest_test_support import EmptyResult, StatefulContestState, make_contest
+from tests.core.contest_test_support import (
+    StubResultBuilder,
+    StatefulContestState,
+    make_contest,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -22,14 +26,11 @@ class MockFact(Event):
 
 
 class MockState(StatefulContestState):
-    def apply(self, fact: Event) -> None:
-        pass
+    def apply(self, fact: Event) -> MockState:
+        return MockState(self.contestants)
 
     def reset(self) -> MockState:
         return MockState(self.contestants)
-
-    def build_result(self) -> Result:
-        return EmptyResult()
 
 
 class MockRuleSet(RuleSet):
@@ -43,8 +44,12 @@ class MockRuleSet(RuleSet):
 def _register_mock_builder() -> None:
     def build(
         contestants: list, _config: object, **_: object
-    ) -> tuple[MockState, MockRuleSet]:
-        return MockState(contestants), MockRuleSet()
+    ) -> ContestAssembly:
+        return ContestAssembly(
+            state=MockState(contestants),
+            ruleset=MockRuleSet(),
+            result_builder=StubResultBuilder(),
+        )
 
     if "mock" not in ContestFactory._builders:
         ContestFactory.register("mock", build)

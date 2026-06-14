@@ -19,7 +19,7 @@ from src.sports.football.contest.commands import ScoreGoal, StartMatch, VarOvert
 from src.sports.football.contest.events import GoalScored
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.descriptor import FOOTBALL_SPORT
-from tests.core.contest_test_support import EmptyResult, StatefulContestState, make_contest
+from tests.core.contest_test_support import StatefulContestState, make_contest
 
 
 def _two_team_match() -> object:
@@ -57,14 +57,11 @@ def test_reverse_decision_rebuilds_via_state_reset() -> None:
         pass
 
     class S(StatefulContestState):
-        def apply(self, fact: Event) -> None:
-            pass
+        def apply(self, fact: Event) -> S:
+            return S(self.contestants)
 
         def reset(self) -> S:
             return S(self.contestants)
-
-        def build_result(self) -> Result:
-            return EmptyResult()
 
     class R(RuleSet):
         def decide_noop(self, command: Noop, state: S) -> list[Event]:

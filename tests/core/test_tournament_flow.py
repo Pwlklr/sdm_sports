@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.core.contest.command import Command
-from src.core.contest.result import Result
-from tests.core.contest_test_support import EmptyResult, StatefulContestState, make_contest
+from tests.core.contest_test_support import StatefulContestState, make_contest
 from src.core.contest.event import Event
 from src.core.contestant import IndividualPlayer
 from src.core.tournament.draw import RoundRobinDrawStrategy
@@ -27,15 +26,15 @@ class EndFact(Event):
 
 
 class DummyState(StatefulContestState):
-    def apply(self, fact: Event) -> None:
+    def apply(self, fact: Event) -> DummyState:
         if isinstance(fact, EndFact):
-            self.is_completed = True
+            finished = DummyState(self.contestants)
+            finished._finished = True
+            return finished
+        return DummyState(self.contestants)
 
     def reset(self) -> DummyState:
         return DummyState(self.contestants)
-
-    def build_result(self) -> Result:
-        return EmptyResult()
 
 
 class DummyRuleSet(RuleSet):

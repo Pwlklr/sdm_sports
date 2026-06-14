@@ -20,7 +20,7 @@ class DartsConsoleView(Observer):
 
         for p in state.players:
             marker = (
-                ">>" if state.current_player == p and not state.is_completed else "  "
+                ">>" if state.current_player == p and not state.is_finished else "  "
             )
             score = state.scores[p.id]
             legs = state.legs_won[p.id]
@@ -32,7 +32,7 @@ class DartsConsoleView(Observer):
 
         print("-" * 45)
 
-        if state.is_completed:
+        if state.is_finished:
             print("🏆 MATCH CONCLUDED 🏆".center(45))
         elif state.current_turn:
             throws_in_turn = len(state.current_turn.throws)

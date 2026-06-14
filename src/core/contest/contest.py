@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-
-
 import uuid
 
 from collections.abc import Iterable
@@ -10,122 +8,68 @@ from dataclasses import replace
 
 from typing import TYPE_CHECKING, List
 
-
-
 from src.core.contest.command import Command, ReverseDecision
-
-from src.core.contest.contest_result import ContestResult
+from src.core.contest.contest_result import ContestResult, OfficialResultView
 from src.core.contest.contest_state import ContestState
-from src.core.contest.result import Result
+from src.core.contest.result_builder import ResultBuilder
 from src.core.contest.rule_set import RuleSet
-
 from src.core.contest.event import Event, EventReversed
-
 from src.core.contest.observer import Subject
 
-
-
 if TYPE_CHECKING:
-
     from src.core.contestant.models import Contestant
 
 
-
-
-
 class Contest(Subject):
-
-    """
-
-    Event-sourced aggregate root.
-
-
-
-    The append-only event log (_history) is the source of truth. current_state is a
-
-    projection fold(events). New facts go through _record_event; reversal replays
-
-    the effective log via _rebuild_state().
-
-    """
-
-
+    """Event-sourced aggregate root."""
 
     def __init__(
-
         self,
-
         state: ContestState,
-
         ruleset: RuleSet,
-
+        result_builder: ResultBuilder,
         contest_id: str | None = None,
-
     ) -> None:
-
         super().__init__()
-
         self.id = contest_id or str(uuid.uuid4())
-
         self.current_state = state
-
         self._ruleset = ruleset
-
-        self.result = ContestResult()
-
+        self._result_builder = result_builder
+        self.result = OfficialResultView()
         self._history: list[Event] = []
 
-
-
     @property
-
     def contestants(self) -> List[Contestant]:
-
         return self.current_state.contestants
 
     @classmethod
-
     def from_events(
-
         cls,
-
         state: ContestState,
-
         ruleset: RuleSet,
-
+        result_builder: ResultBuilder,
         events: Iterable[Event],
-
         contest_id: str | None = None,
-
     ) -> Contest:
-
         """Rehydrate a contest by replaying a persisted event log."""
-
-        contest = cls(state, ruleset, contest_id=contest_id)
-
+        contest = cls(state, ruleset, result_builder, contest_id=contest_id)
         contest._history = list(events)
-
         contest._rebuild_state()
-
         return contest
 
-
-
     @property
-
     def history(self) -> list[Event]:
-
         return self._history.copy()
 
     def active_domain_events(self) -> list[Event]:
         """Domain facts currently affecting the projection (reversal candidates)."""
         return self._effective_domain_events()
 
-    def get_final_result(self) -> Result:
-        if not self.current_state.is_completed:
+    def get_final_result(self) -> ContestResult:
+        if not self.current_state.is_finished:
             raise ValueError("Match is not completed.")
         if self.result.played is None:
-            self.result.record_played(self.current_state.build_result())
+            self.result.record_played(self._result_builder.build(self.current_state))
         final = self.result.effective_result
         if final is None:
             raise ValueError("Match is completed but no result is available.")
@@ -151,57 +95,31 @@ class Contest(Subject):
         return emitted
 
     def _handle_reversal(self, command: ReverseDecision) -> list[EventReversed]:
-
         markers = self._ruleset.decide_reversal(
-
             command, self.current_state, self._history
-
         )
-
         for marker in markers:
-
             self._record_meta_event(marker)
-
         self._rebuild_state()
-
         return markers
 
-
-
     def _record_event(self, fact: Event) -> None:
-
-        self.current_state.apply(fact)
-
+        self.current_state = self.current_state.apply(fact)
         self._history.append(fact)
-
         self.notify(fact)
-
         self._refresh_result()
 
-
-
     def _record_meta_event(self, fact: Event) -> None:
-
         self._history.append(fact)
-
         self.notify(fact)
 
-
-
     def _rebuild_state(self) -> None:
-
         """Replay the effective event log onto a fresh projection."""
-
         self.current_state = self.current_state.reset()
-
         self.result.reset_played()
-
         for event in self._effective_domain_events():
-
-            self.current_state.apply(event)
-
+            self.current_state = self.current_state.apply(event)
             self._refresh_result()
-
         self.notify(None)
 
     def _get_withdrawn_event_ids(self) -> set[str]:
@@ -228,9 +146,7 @@ class Contest(Subject):
         ]
 
     def _refresh_result(self) -> None:
-
-        if self.current_state.is_completed and self.result.played is None:
-
-            self.result.record_played(self.current_state.build_result())
-
-
+        if self.current_state.is_finished and self.result.played is None:
+            self.result.record_played(
+                self._result_builder.build(self.current_state)
+            )

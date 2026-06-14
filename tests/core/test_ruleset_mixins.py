@@ -6,7 +6,6 @@ import pytest
 
 from src.core.contest.command import Command
 from tests.core.contest_test_support import StatefulContestState
-from src.core.contest.result import Result
 from src.core.contest.event import Event
 from src.core.contest.rule_set import RuleSet
 
@@ -27,17 +26,11 @@ class FactA(Event):
 
 
 class _State(StatefulContestState):
-    def apply(self, fact: Event) -> None:
-        pass
+    def apply(self, fact: Event) -> _State:
+        return _State(self.contestants)
 
     def reset(self) -> _State:
         return _State(self.contestants)
-
-    def build_result(self) -> Result:
-        from tests.core.contest_test_support import EmptyResult
-
-        return EmptyResult()
-
 
 class MixinA:
     def decide_a(self, command: CmdA, state: _State) -> list[Event]:

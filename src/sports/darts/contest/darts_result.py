@@ -1,22 +1,50 @@
-from typing import Dict, Optional
+from __future__ import annotations
 
-from src.core.contestant import Contestant
-from src.core.contest.result import Result
+from dataclasses import dataclass
+
+from src.core.contest.contest_result import ContestResult, RankedEntry
+from src.core.contest.metrics import SideMetrics
+from src.sports.darts.contest.darts_result import DartsSideMetrics
 
 
-class DartsResult(Result):
-    def __init__(
-        self,
-        winner: Optional[Contestant],
-        sets_won: Dict[str, int],
-        legs_won: Dict[str, int],
-    ) -> None:
-        self._winner = winner
-        self.sets_won = sets_won.copy()
-        self.legs_won = legs_won.copy()
+@dataclass(frozen=True, kw_only=True)
+class DartsContestantMetrics:
+    contestant_id: str
+    sets_won: int
+    legs_won: int
+    darts_thrown: int
+    highest_checkout: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class DartsSideMetrics(SideMetrics):
+    by_contestant_id: dict[str, DartsContestantMetrics]
+
+
+@dataclass(frozen=True, kw_only=True)
+class DartsResult(ContestResult):
+    ranking_entries: tuple[RankedEntry, ...]
+    side: DartsSideMetrics
 
     def is_finished(self) -> bool:
-        return self._winner is not None
+        return bool(self.ranking_entries)
 
-    def get_winner(self) -> Optional[Contestant]:
-        return self._winner
+    def ranking(self) -> tuple[RankedEntry, ...]:
+        return self.ranking_entries
+
+    def side_metrics(self) -> SideMetrics:
+        return self.side
+
+    @property
+    def sets_won(self) -> dict[str, int]:
+        return {
+            cid: metrics.sets_won
+            for cid, metrics in self.side.by_contestant_id.items()
+        }
+
+    @property
+    def legs_won(self) -> dict[str, int]:
+        return {
+            cid: metrics.legs_won
+            for cid, metrics in self.side.by_contestant_id.items()
+        }

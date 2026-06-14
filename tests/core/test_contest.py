@@ -5,11 +5,9 @@ import pytest
 from dataclasses import dataclass
 
 from src.core.contest.command import Command
-from src.core.contest.result import Result
-from tests.core.contest_test_support import EmptyResult, StatefulContestState, make_contest
+from tests.core.contest_test_support import StatefulContestState, make_contest
 from src.core.contest.event import Event
 from src.core.contestant import IndividualPlayer
-from src.core.contest.contest_state import ContestState
 from src.core.contest.rule_set import RuleSet
 
 
@@ -24,14 +22,11 @@ class MockFact(Event):
 
 
 class MockState(StatefulContestState):
-    def apply(self, fact: Event) -> None:
-        pass
+    def apply(self, fact: Event) -> MockState:
+        return MockState(self.contestants)
 
     def reset(self) -> MockState:
         return MockState(self.contestants)
-
-    def build_result(self) -> Result:
-        return EmptyResult()
 
 
 class MockRuleSet(RuleSet):
@@ -52,7 +47,7 @@ def test_contest_initialization() -> None:
 
     assert contest.id is not None
     assert len(contest.contestants) == 2
-    assert contest.current_state == state
+    assert contest.current_state.contestants == state.contestants
     assert contest.result.played is None
     assert not contest.result.is_finished()
 

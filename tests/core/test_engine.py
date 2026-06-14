@@ -5,8 +5,7 @@ import pytest
 from dataclasses import dataclass
 
 from src.core.contest.command import Command
-from src.core.contest.result import Result
-from tests.core.contest_test_support import EmptyResult, StatefulContestState, make_contest
+from tests.core.contest_test_support import StatefulContestState, make_contest
 from src.core.contest.event import Event
 from src.core.system.sports_system_engine import SportsSystemEngine
 from src.core.contest.rule_set import RuleSet
@@ -23,14 +22,11 @@ class DummyFact(Event):
 
 
 class DummyState(StatefulContestState):
-    def apply(self, fact: Event) -> None:
-        pass
+    def apply(self, fact: Event) -> DummyState:
+        return DummyState(self.contestants)
 
     def reset(self) -> DummyState:
         return DummyState(self.contestants)
-
-    def build_result(self) -> Result:
-        return EmptyResult()
 
 
 class DummyRuleSet(RuleSet):

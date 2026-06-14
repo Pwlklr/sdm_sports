@@ -59,9 +59,11 @@ def test_adapter_parse_via_parser_module() -> None:
 
 
 def test_adapter_parse_penalty_command() -> None:
+    from dataclasses import replace
+
     adapter = _adapter()
     match = _match()
-    match.current_state.phase = MatchPhase.PENALTIES  # type: ignore[attr-defined]
+    match.current_state = replace(match.current_state, phase=MatchPhase.PENALTIES)
 
     cmd = adapter.parse_command("pk 1 g", match)
     assert isinstance(cmd, TakePenaltyKick)

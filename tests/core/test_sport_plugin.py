@@ -16,6 +16,8 @@ def test_engine_registers_plugins_from_constructor() -> None:
     assert ids == {DARTS_SPORT.id, FOOTBALL_SPORT.id}
     assert engine.get_adapter(DARTS_SPORT.id) is not None
     assert engine.get_adapter(FOOTBALL_SPORT.id) is not None
+    assert engine.get_match_metrics_reader(FOOTBALL_SPORT.id) is not None
+    assert engine.get_match_metrics_reader(DARTS_SPORT.id) is not None
 
 
 def test_sport_plugin_rejects_mismatched_adapter() -> None:

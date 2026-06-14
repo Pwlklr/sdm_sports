@@ -51,8 +51,12 @@ def test_end_period_command() -> None:
 
 
 def test_penalty_kick_command() -> None:
+    from dataclasses import replace
+
     contest = _contest()
     contest.handle(StartMatch())
-    contest.current_state.phase = MatchPhase.PENALTIES
+    contest.current_state = replace(
+        contest.current_state, phase=MatchPhase.PENALTIES
+    )
     contest.handle(TakePenaltyKick(team_index=0, scored=True))
     assert contest.current_state.penalty_scores["home"] == 1

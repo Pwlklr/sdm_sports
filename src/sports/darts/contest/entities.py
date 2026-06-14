@@ -1,12 +1,18 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
 from typing import List
 
 
+@dataclass(frozen=True, kw_only=True)
 class DartThrow:
-    """Read-model value for a recorded throw (geometry validated at system entry)."""
+    sector: int
+    multiplier: int = 1
 
-    def __init__(self, sector: int, multiplier: int = 1) -> None:
-        self.sector = sector
-        self.multiplier = 1 if sector == 0 else multiplier
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "multiplier", 1 if self.sector == 0 else self.multiplier
+        )
 
     @property
     def points(self) -> int:
@@ -19,19 +25,13 @@ class DartThrow:
         return f"{prefix} {self.sector}"
 
 
+@dataclass(frozen=True, kw_only=True)
 class DartTurn:
-    """Read model: throws recorded during a single visit."""
+    throws: tuple[DartThrow, ...] = ()
 
-    def __init__(self) -> None:
-        self._throws: List[DartThrow] = []
-
-    def add_throw(self, dart_throw: DartThrow) -> None:
-        self._throws.append(dart_throw)
-
-    @property
-    def throws(self) -> List[DartThrow]:
-        return self._throws.copy()
+    def with_throw(self, dart_throw: DartThrow) -> DartTurn:
+        return DartTurn(throws=self.throws + (dart_throw,))
 
     @property
     def total_points(self) -> int:
-        return sum(t.points for t in self._throws)
+        return sum(t.points for t in self.throws)

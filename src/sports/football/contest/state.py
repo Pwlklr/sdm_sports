@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import TYPE_CHECKING, ClassVar, Dict, List, Optional
+from typing import ClassVar, Optional
 
-from src.core.contest.event import Event
 from src.core.contest.contest_state import ContestState
-from src.core.contest.result import Result
+from src.core.contest.event import Event
+from src.core.contestant.models import Contestant, Team
 from src.sports.football.contest.entities import (
     DisciplinaryRecord,
     Goal,
@@ -28,11 +29,10 @@ from src.sports.football.contest.events import (
     PlayerDismissed,
     PlayerSubstituted,
 )
-
-from src.core.contestant.models import Contestant, Team
 from src.sports.football.contest.football_match_config import FootballMatchConfig
+from src.sports.football.contest.player_stats import FootballPlayerStats, init_player_stats_for_teams
 
-if TYPE_CHECKING:
+if False:
     from src.sports.football.contest.roster_status import PlayerRosterStatus
 
 
@@ -43,48 +43,38 @@ class MatchPhase(Enum):
     COMPLETED = "Completed"
 
 
-class FootballContestState(ContestState):
-    """Football match data mutated exclusively through apply(fact)."""
+@dataclass(frozen=True, kw_only=True)
+class FootballContestState:
+    """Football match projection updated exclusively through apply(fact)."""
+
+    teams: tuple[Team, Team]
+    config: FootballMatchConfig
+    suspended_player_ids: frozenset[str] = frozenset()
+    scores: dict[str, int] = field(default_factory=dict)
+    lineups: dict[str, MatchLineup] = field(default_factory=dict)
+    penalty_scores: dict[str, int] = field(default_factory=dict)
+    penalty_attempts: dict[str, int] = field(default_factory=dict)
+    disciplinary: DisciplinaryRecord = field(default_factory=DisciplinaryRecord)
+    player_stats: dict[str, FootballPlayerStats] = field(default_factory=dict)
+    periods: tuple[MatchPeriod, ...] = ()
+    current_period_idx: int = -1
+    phase: MatchPhase = MatchPhase.REGULATION
+    match_started: bool = False
+    winner: Optional[Contestant] = None
+    was_draw: bool = False
+    decided_by: str = "regulation"
+    is_finished: bool = False
 
     _appliers: ClassVar[
-        dict[type[Event], Callable[["FootballContestState", Event], None]]
+        dict[type[Event], Callable[["FootballContestState", Event], FootballContestState]]
     ] = {}
 
-    def __init__(
-        self,
-        teams: List[Contestant],
-        config: FootballMatchConfig,
-        *,
-        suspended_player_ids: frozenset[str] | None = None,
-    ) -> None:
-        super().__init__()
-        if len(teams) != 2:
+    def __post_init__(self) -> None:
+        if len(self.teams) != 2:
             raise ValueError("A football match requires exactly two sides.")
-        for side in teams:
+        for side in self.teams:
             if not isinstance(side, Team):
                 raise ValueError("Football matches require Team contestants.")
-
-        self.teams = teams
-        self.config = config
-        self.suspended_player_ids: frozenset[str] = (
-            suspended_player_ids if suspended_player_ids is not None else frozenset()
-        )
-
-        self.scores: Dict[str, int] = {t.id: 0 for t in teams}
-        self.lineups: Dict[str, MatchLineup] = {}
-        self.penalty_scores: Dict[str, int] = {t.id: 0 for t in teams}
-        self.penalty_attempts: Dict[str, int] = {t.id: 0 for t in teams}
-        self.disciplinary = DisciplinaryRecord()
-
-        self.periods: List[MatchPeriod] = []
-        self.current_period_idx: int = -1
-        self.phase: MatchPhase = MatchPhase.REGULATION
-        self.match_started: bool = False
-
-        self.winner: Optional[Contestant] = None
-        self.was_draw: bool = False
-        self.decided_by: str = "regulation"
-        self.is_completed: bool = False
 
     @property
     def contestants(self) -> list[Contestant]:
@@ -103,7 +93,6 @@ class FootballContestState(ContestState):
         return None
 
     def is_suspended(self, player_id: str) -> bool:
-        """Tournament-level suspension carried into this match (not in-match cards)."""
         return player_id in self.suspended_player_ids
 
     def lineup_for(self, team_id: str) -> Optional[MatchLineup]:
@@ -124,16 +113,6 @@ class FootballContestState(ContestState):
     def count_periods(self, kind: PeriodKind) -> int:
         return len([p for p in self.periods if p.kind == kind])
 
-    def _start_period(self, kind: PeriodKind, index: int) -> None:
-        length = (
-            self.config.half_length_minutes
-            if kind == PeriodKind.REGULAR
-            else self.config.extra_time_half_length
-        )
-        period = MatchPeriod(index=index, length_minutes=length, kind=kind)
-        self.periods.append(period)
-        self.current_period_idx = len(self.periods) - 1
-
     @property
     def is_draw(self) -> bool:
         return self.scores[self.teams[0].id] == self.scores[self.teams[1].id]
@@ -146,49 +125,74 @@ class FootballContestState(ContestState):
             return second
         return None
 
-    def roster_status(self, team: Team) -> list[PlayerRosterStatus]:
+    def with_tournament_context(
+        self, *, suspended_player_ids: frozenset[str]
+    ) -> FootballContestState:
+        return replace(self, suspended_player_ids=suspended_player_ids)
+
+    def roster_status(self, team: Team) -> list:
         from src.sports.football.contest.roster_status import roster_status_for_team
 
         return roster_status_for_team(self, team)
 
-    def apply(self, fact: Event) -> None:
+    def apply(self, fact: Event) -> FootballContestState:
         handler = self._appliers.get(type(fact))
         if handler:
-            handler(self, fact)
+            return handler(self, fact)
+        return self
 
     def reset(self) -> FootballContestState:
         return FootballContestState(
-            list(self.teams),
-            self.config,
+            teams=self.teams,
+            config=self.config,
             suspended_player_ids=self.suspended_player_ids,
-        )
-
-    def build_result(self) -> Result:
-        from src.sports.football.contest.football_result import FootballResult
-
-        return FootballResult(
-            winner=self.winner,
-            scores=self.scores,
-            was_draw=self.was_draw,
-            decided_by=self.decided_by,
+            scores={t.id: 0 for t in self.teams},
+            penalty_scores={t.id: 0 for t in self.teams},
+            penalty_attempts={t.id: 0 for t in self.teams},
+            player_stats=init_player_stats_for_teams(self.teams),
         )
 
 
-def _apply_match_started(state: FootballContestState, fact: Event) -> None:
-    state.match_started = True
+def _start_period(
+    state: FootballContestState, kind: PeriodKind, index: int
+) -> FootballContestState:
+    length = (
+        state.config.half_length_minutes
+        if kind == PeriodKind.REGULAR
+        else state.config.extra_time_half_length
+    )
+    period = MatchPeriod(index=index, length_minutes=length, kind=kind)
+    periods = state.periods + (period,)
+    return replace(state, periods=periods, current_period_idx=len(periods) - 1)
 
 
-def _apply_period_started(state: FootballContestState, fact: Event) -> None:
+def _update_player_stats(
+    stats: dict[str, FootballPlayerStats], player_id: str | None, updater
+) -> dict[str, FootballPlayerStats]:
+    if player_id is None or player_id not in stats:
+        return stats
+    new_stats = dict(stats)
+    new_stats[player_id] = updater(stats[player_id])
+    return new_stats
+
+
+def _apply_match_started(state: FootballContestState, fact: Event) -> FootballContestState:
+    return replace(state, match_started=True)
+
+
+def _apply_period_started(state: FootballContestState, fact: Event) -> FootballContestState:
     assert isinstance(fact, PeriodStarted)
-    state._start_period(fact.kind, fact.index)
+    return _start_period(state, fact.kind, fact.index)
 
 
-def _apply_goal_scored(state: FootballContestState, fact: Event) -> None:
+def _apply_goal_scored(state: FootballContestState, fact: Event) -> FootballContestState:
     assert isinstance(fact, GoalScored)
-    state.scores[fact.team_id] += 1
+    scores = dict(state.scores)
+    scores[fact.team_id] = scores.get(fact.team_id, 0) + 1
     period = state.current_period
+    periods = state.periods
     if period is not None:
-        period.add_goal(
+        updated = period.with_goal(
             Goal(
                 team_id=fact.team_id,
                 scorer_id=fact.scorer_id,
@@ -197,59 +201,99 @@ def _apply_goal_scored(state: FootballContestState, fact: Event) -> None:
                 penalty=fact.penalty,
             )
         )
+        periods = (
+            state.periods[: state.current_period_idx]
+            + (updated,)
+            + state.periods[state.current_period_idx + 1 :]
+        )
+    player_stats = _update_player_stats(
+        state.player_stats, fact.scorer_id, lambda s: s.with_goal()
+    )
+    return replace(state, scores=scores, periods=periods, player_stats=player_stats)
 
 
-def _apply_player_cautioned(state: FootballContestState, fact: Event) -> None:
+def _apply_player_cautioned(state: FootballContestState, fact: Event) -> FootballContestState:
     assert isinstance(fact, PlayerCautioned)
-    state.disciplinary.record_yellow(fact.offender_id)
+    disciplinary = state.disciplinary.with_yellow(fact.offender_id)
+    player_stats = _update_player_stats(
+        state.player_stats, fact.offender_id, lambda s: s.with_yellow()
+    )
+    return replace(state, disciplinary=disciplinary, player_stats=player_stats)
 
 
-def _apply_player_dismissed(state: FootballContestState, fact: Event) -> None:
+def _apply_player_dismissed(state: FootballContestState, fact: Event) -> FootballContestState:
     assert isinstance(fact, PlayerDismissed)
-    state.disciplinary.dismiss(fact.offender_id)
+    disciplinary = state.disciplinary.with_dismissal(fact.offender_id)
+    player_stats = _update_player_stats(
+        state.player_stats, fact.offender_id, lambda s: s.with_dismissed()
+    )
+    return replace(state, disciplinary=disciplinary, player_stats=player_stats)
 
 
-def _apply_period_ended(state: FootballContestState, fact: Event) -> None:
+def _apply_period_ended(state: FootballContestState, fact: Event) -> FootballContestState:
     period = state.current_period
-    if period is not None:
-        period.end()
+    if period is None:
+        return state
+    updated = period.with_ended()
+    periods = (
+        state.periods[: state.current_period_idx]
+        + (updated,)
+        + state.periods[state.current_period_idx + 1 :]
+    )
+    return replace(state, periods=periods)
 
 
-def _apply_extra_time_started(state: FootballContestState, fact: Event) -> None:
-    state.phase = MatchPhase.EXTRA_TIME
+def _apply_extra_time_started(state: FootballContestState, fact: Event) -> FootballContestState:
+    return replace(state, phase=MatchPhase.EXTRA_TIME)
 
 
-def _apply_penalty_shootout_started(state: FootballContestState, fact: Event) -> None:
-    state.phase = MatchPhase.PENALTIES
+def _apply_penalty_shootout_started(
+    state: FootballContestState, fact: Event
+) -> FootballContestState:
+    return replace(state, phase=MatchPhase.PENALTIES)
 
 
-def _apply_penalty_kick_taken(state: FootballContestState, fact: Event) -> None:
+def _apply_penalty_kick_taken(state: FootballContestState, fact: Event) -> FootballContestState:
     assert isinstance(fact, PenaltyKickTaken)
-    state.penalty_attempts[fact.team_id] += 1
+    attempts = dict(state.penalty_attempts)
+    attempts[fact.team_id] = attempts.get(fact.team_id, 0) + 1
+    scores = dict(state.penalty_scores)
     if fact.scored:
-        state.penalty_scores[fact.team_id] += 1
+        scores[fact.team_id] = scores.get(fact.team_id, 0) + 1
+    return replace(state, penalty_attempts=attempts, penalty_scores=scores)
 
 
-def _apply_match_concluded(state: FootballContestState, fact: Event) -> None:
+def _apply_match_concluded(state: FootballContestState, fact: Event) -> FootballContestState:
     assert isinstance(fact, MatchConcluded)
-    state.was_draw = fact.draw
-    state.decided_by = fact.decided_by
-    state.phase = MatchPhase.COMPLETED
-    state.is_completed = True
-    if fact.winner_id is not None:
-        state.winner = state.team_by_id(fact.winner_id)
+    winner = state.team_by_id(fact.winner_id) if fact.winner_id is not None else None
+    return replace(
+        state,
+        was_draw=fact.draw,
+        decided_by=fact.decided_by,
+        phase=MatchPhase.COMPLETED,
+        is_finished=True,
+        winner=winner,
+    )
 
 
-def _apply_lineup_submitted(state: FootballContestState, fact: Event) -> None:
+def _apply_lineup_submitted(state: FootballContestState, fact: Event) -> FootballContestState:
     assert isinstance(fact, LineupSubmitted)
-    state.lineups[fact.team_id] = MatchLineup(set(fact.starting), set(fact.bench))
+    lineups = dict(state.lineups)
+    lineups[fact.team_id] = MatchLineup(
+        starting=frozenset(fact.starting),
+        bench=frozenset(fact.bench),
+    )
+    return replace(state, lineups=lineups)
 
 
-def _apply_player_substituted(state: FootballContestState, fact: Event) -> None:
+def _apply_player_substituted(state: FootballContestState, fact: Event) -> FootballContestState:
     assert isinstance(fact, PlayerSubstituted)
     lineup = state.lineups.get(fact.team_id)
-    if lineup is not None:
-        lineup.substitute(fact.player_out, fact.player_in)
+    if lineup is None:
+        return state
+    lineups = dict(state.lineups)
+    lineups[fact.team_id] = lineup.with_substitution(fact.player_out, fact.player_in)
+    return replace(state, lineups=lineups)
 
 
 FootballContestState._appliers = {
@@ -266,3 +310,25 @@ FootballContestState._appliers = {
     LineupSubmitted: _apply_lineup_submitted,
     PlayerSubstituted: _apply_player_substituted,
 }
+
+
+def create_football_contest_state(
+    teams: list[Contestant],
+    config: FootballMatchConfig,
+    *,
+    suspended_player_ids: frozenset[str] | None = None,
+) -> FootballContestState:
+    if len(teams) != 2:
+        raise ValueError("A football match requires exactly two sides.")
+    pair = (teams[0], teams[1])
+    if not isinstance(pair[0], Team) or not isinstance(pair[1], Team):
+        raise ValueError("Football matches require Team contestants.")
+    return FootballContestState(
+        teams=pair,
+        config=config,
+        suspended_player_ids=suspended_player_ids or frozenset(),
+        scores={t.id: 0 for t in pair},
+        penalty_scores={t.id: 0 for t in pair},
+        penalty_attempts={t.id: 0 for t in pair},
+        player_stats=init_player_stats_for_teams(pair),
+    )

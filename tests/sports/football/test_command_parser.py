@@ -1,5 +1,7 @@
 import pytest
 
+from dataclasses import replace
+
 from src.core.contestant.models import IndividualPlayer, Team
 from src.sports.football.console.football_command_parser import parse_football_command
 from src.sports.football.contest.commands import (
@@ -10,7 +12,7 @@ from src.sports.football.contest.commands import (
     TakePenaltyKick,
 )
 from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.contest.state import FootballContestState, MatchPhase
+from src.sports.football.contest.state import FootballContestState, MatchPhase, create_football_contest_state
 from src.sports.football.contest.events import MatchStarted, PeriodStarted
 from src.sports.football.contest.entities import PeriodKind
 
@@ -20,9 +22,9 @@ def _state() -> FootballContestState:
     away = Team("Away", "away")
     home.add_player(IndividualPlayer("Striker", "striker"))
     away.add_player(IndividualPlayer("Defender", "defender"))
-    state = FootballContestState([home, away], config=FootballMatchConfig())
-    state.apply(MatchStarted())
-    state.apply(PeriodStarted(kind=PeriodKind.REGULAR, index=0))
+    state = create_football_contest_state([home, away], config=FootballMatchConfig())
+    state = state.apply(MatchStarted())
+    state = state.apply(PeriodStarted(kind=PeriodKind.REGULAR, index=0))
     return state
 
 
@@ -80,8 +82,7 @@ def test_parse_roster_command(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_parse_penalty_kick() -> None:
-    state = _state()
-    state.phase = MatchPhase.PENALTIES
+    state = replace(_state(), phase=MatchPhase.PENALTIES)
     cmd = parse_football_command("pk 2 m", state)
     assert isinstance(cmd, TakePenaltyKick)
     assert cmd.team_index == 1

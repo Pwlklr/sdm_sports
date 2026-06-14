@@ -46,7 +46,7 @@ class FootballCoreRules:
     def decide_start_match(
         self, command: StartMatch, state: FootballContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest juz zakonczony.")
         if state.match_started:
             reject("Mecz zostal juz rozpoczety.")
@@ -58,7 +58,7 @@ class FootballCoreRules:
     def decide_score_goal(
         self, command: ScoreGoal, state: FootballContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna strzelic gola.")
         if state.phase == MatchPhase.PENALTIES:
             reject("Trwa seria rzutow karnych - uzyj 'pk'.")
@@ -89,7 +89,7 @@ class FootballCoreRules:
     def decide_end_period(
         self, command: EndPeriod, state: FootballContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest zakonczony.")
         if state.phase == MatchPhase.PENALTIES:
             reject("Trwa seria rzutow karnych - nie konczy sie okresow.")
@@ -139,7 +139,7 @@ class FootballDisciplineRules:
     def decide_commit_foul(
         self, command: CommitFoul, state: FootballContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna zglosic przewinienia.")
 
         team = state.teams[command.team_index]
@@ -193,7 +193,7 @@ class FootballDisciplineRules:
     def react_player_dismissed(
         self, fact: PlayerDismissed, state: FootballContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             return []
         remaining = state.active_players_on_pitch(fact.team_id)
         if remaining >= state.config.min_players_on_pitch:
@@ -225,7 +225,7 @@ class FootballKnockoutRules:
     def decide_take_penalty_kick(
         self, command: TakePenaltyKick, state: FootballContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest zakonczony.")
         if state.phase != MatchPhase.PENALTIES:
             reject("Rzuty karne dostepne tylko w serii rzutow karnych.")
@@ -277,7 +277,7 @@ class FootballSquadRules:
     def decide_submit_lineup(
         self, command: SubmitLineup, state: FootballContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna zglosic skladu.")
 
         team = state.teams[command.team_index]
@@ -321,7 +321,7 @@ class FootballSquadRules:
     def decide_substitute_player(
         self, command: SubstitutePlayer, state: FootballContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna dokonac zmiany.")
 
         team = state.teams[command.team_index]

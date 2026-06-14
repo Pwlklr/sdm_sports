@@ -1,12 +1,14 @@
 import pytest
 
+from dataclasses import replace
+
 from src.core.contest import Contest
 from src.core.shared.command_rejected import CommandRejected
 from src.core.contestant.models import IndividualPlayer, Team
 from src.sports.football.contest.commands import CommitFoul, ScoreGoal, StartMatch
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.football_rule_set import FootballRuleSet
-from src.sports.football.contest.state import FootballContestState
+from src.sports.football.contest.state import create_football_contest_state
 from src.core.contest import ContestFactory
 from src.sports.football.descriptor import FOOTBALL_SPORT
 
@@ -27,7 +29,6 @@ def _handle_foul(contest: Contest, **kwargs: object) -> None:
 
 def test_two_yellows_lead_to_dismissal_via_contest() -> None:
     contest = _started_contest()
-    state = contest.current_state
 
     _handle_foul(
         contest,
@@ -36,6 +37,7 @@ def test_two_yellows_lead_to_dismissal_via_contest() -> None:
         card="yellow",
         offender_id="p9",
     )
+    state = contest.current_state
     assert state.disciplinary.yellows_for("p9") == 1
     assert not state.disciplinary.is_dismissed("p9")
 
@@ -46,12 +48,12 @@ def test_two_yellows_lead_to_dismissal_via_contest() -> None:
         card="yellow",
         offender_id="p9",
     )
+    state = contest.current_state
     assert state.disciplinary.is_dismissed("p9")
 
 
 def test_dismissed_player_cannot_receive_more_cards() -> None:
     contest = _started_contest()
-    state = contest.current_state
 
     _handle_foul(
         contest,
@@ -60,6 +62,7 @@ def test_dismissed_player_cannot_receive_more_cards() -> None:
         card="red",
         offender_id="p9",
     )
+    state = contest.current_state
     assert state.disciplinary.is_dismissed("p9")
 
     with pytest.raises(CommandRejected):
@@ -70,7 +73,7 @@ def test_dismissed_player_cannot_receive_more_cards() -> None:
             card="yellow",
             offender_id="p9",
         )
-    assert state.disciplinary.yellows_for("p9") == 0
+    assert contest.current_state.disciplinary.yellows_for("p9") == 0
 
     with pytest.raises(CommandRejected):
         _handle_foul(
@@ -80,12 +83,11 @@ def test_dismissed_player_cannot_receive_more_cards() -> None:
             card="red",
             offender_id="p9",
         )
-    assert state.disciplinary.yellows_for("p9") == 0
+    assert contest.current_state.disciplinary.yellows_for("p9") == 0
 
 
 def test_direct_red_dismisses_without_yellows() -> None:
     contest = _started_contest()
-    state = contest.current_state
 
     _handle_foul(
         contest,
@@ -94,13 +96,13 @@ def test_direct_red_dismisses_without_yellows() -> None:
         card="red",
         offender_id="p9",
     )
+    state = contest.current_state
     assert state.disciplinary.is_dismissed("p9")
     assert state.disciplinary.yellows_for("p9") == 0
 
 
 def test_foul_without_card_does_not_change_discipline() -> None:
     contest = _started_contest()
-    state = contest.current_state
 
     _handle_foul(
         contest,
@@ -110,15 +112,16 @@ def test_foul_without_card_does_not_change_discipline() -> None:
         offender_id="p9",
         reason="Late tackle",
     )
+    state = contest.current_state
     assert state.disciplinary.yellows_for("p9") == 0
     assert not state.disciplinary.is_dismissed("p9")
 
 
 def test_score_goal_records_scorer_and_minute() -> None:
     contest = _started_contest()
-    state = contest.current_state
 
     contest.handle(ScoreGoal(team_index=0, minute=23, scorer_id="p9", penalty=True))
+    state = contest.current_state
     period = state.current_period
     assert period is not None
     assert len(period.goals) == 1
@@ -129,14 +132,11 @@ def test_score_goal_records_scorer_and_minute() -> None:
 
 
 def test_ruleset_rejects_card_for_dismissed_player() -> None:
-    state = FootballContestState(
-        [Team("H", "h"), Team("A", "a")],
-        config=FootballMatchConfig(),
-    )
-    team = state.teams[0]
-    assert isinstance(team, Team)
-    team.add_player(IndividualPlayer("X", "x"))
-    state.disciplinary.dismiss("x")
+    home = Team("H", "h")
+    away = Team("A", "a")
+    home.add_player(IndividualPlayer("X", "x"))
+    state = create_football_contest_state([home, away], FootballMatchConfig())
+    state = replace(state, disciplinary=state.disciplinary.with_dismissal("x"))
     ruleset = FootballRuleSet(FootballMatchConfig())
 
     with pytest.raises(CommandRejected):

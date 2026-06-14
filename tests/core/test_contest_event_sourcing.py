@@ -12,6 +12,7 @@ from src.sports.football.contest.events import GoalScored
 
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 
+from src.core.tournament.ranking import single_first_place
 from src.sports.football.contest.football_result import FootballResult
 
 from src.sports.football.descriptor import FOOTBALL_SPORT
@@ -134,5 +135,5 @@ def test_to_result_on_completed_match() -> None:
 
     assert isinstance(final, FootballResult)
 
-    assert final.get_winner() is not None
+    assert single_first_place(final.ranking()) is not None
 

@@ -30,7 +30,7 @@ class DartsRuleSet(RuleSet):
     def decide_start_match(
         self, command: StartMatch, state: DartsContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest juz zakonczony.")
         if state.match_started:
             reject("Mecz zostal juz rozpoczety.")
@@ -39,7 +39,7 @@ class DartsRuleSet(RuleSet):
     def decide_throw_dart(
         self, command: ThrowDart, state: DartsContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna rzucac.")
 
         if state.current_turn is None:
@@ -74,7 +74,7 @@ class DartsRuleSet(RuleSet):
     def decide_oche_fault(
         self, command: CallOcheFault, state: DartsContestState
     ) -> list[Event]:
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna zglosic faulu.")
         if state.current_turn is None:
             reject("Brak aktywnej tury - rozpocznij mecz.")

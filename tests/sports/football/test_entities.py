@@ -20,13 +20,13 @@ def test_goal_rejects_negative_minute() -> None:
 
 def test_match_period_collects_goals() -> None:
     period = MatchPeriod(index=0, length_minutes=45, kind=PeriodKind.REGULAR)
-    period.add_goal(Goal(team_id="home"))
+    period = period.with_goal(Goal(team_id="home"))
     assert len(period.goals) == 1
     assert not period.is_finished
 
 
 def test_disciplinary_record_accumulates() -> None:
     record = DisciplinaryRecord()
-    record.record_yellow("p1")
-    record.record_yellow("p1")
+    record = record.with_yellow("p1")
+    record = record.with_yellow("p1")
     assert record.yellows_for("p1") == 2

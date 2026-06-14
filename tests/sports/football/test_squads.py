@@ -115,7 +115,7 @@ def test_insufficient_players_on_pitch_awards_walkover_to_opponent() -> None:
     match.handle(CommitFoul(team_index=0, minute=20, card="red", offender_id="h2"))
     match.handle(CommitFoul(team_index=0, minute=30, card="red", offender_id="h3"))
 
-    assert match.current_state.is_completed
+    assert match.current_state.is_finished
     assert match.current_state.decided_by == "walkover_insufficient_players"
     assert match.current_state.winner is match.contestants[1]
     assert match.current_state.active_players_on_pitch("home") == 1
@@ -124,21 +124,36 @@ def test_insufficient_players_on_pitch_awards_walkover_to_opponent() -> None:
 def test_red_card_carries_over_as_suspension() -> None:
     match = _match()
     match.handle(CommitFoul(team_index=0, minute=30, card="red", offender_id="h1"))
+    from dataclasses import replace
+
+    from src.sports.football.contest.football_result_builder import FootballResultBuilder
+
+    state = replace(match.current_state, is_finished=True)
+    result = FootballResultBuilder(config=FootballMatchConfig()).build(state)
     board = TournamentDisciplinaryBoard()
-    accrue_suspensions(board, match.current_state)
+    accrue_suspensions(board, result)
     assert board.is_suspended("h1")
     assert "h1" in board.suspended_ids()
 
 
 def test_accumulated_yellows_trigger_suspension() -> None:
+    from dataclasses import replace
+
+    from src.sports.football.contest.football_result_builder import FootballResultBuilder
+
     board = TournamentDisciplinaryBoard()
+    builder = FootballResultBuilder(config=FootballMatchConfig())
 
     match1 = _match()
     match1.handle(CommitFoul(team_index=0, minute=10, card="yellow", offender_id="h1"))
-    accrue_suspensions(board, match1.current_state)
+    accrue_suspensions(
+        board, builder.build(replace(match1.current_state, is_finished=True))
+    )
     assert not board.is_suspended("h1")
 
     match2 = _match()
     match2.handle(CommitFoul(team_index=0, minute=10, card="yellow", offender_id="h1"))
-    accrue_suspensions(board, match2.current_state)
+    accrue_suspensions(
+        board, builder.build(replace(match2.current_state, is_finished=True))
+    )
     assert board.is_suspended("h1")

@@ -3,13 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.core.contestant.models import IndividualPlayer, Team
-from src.sports.football.contest.entities import DisciplinaryRecord
 from src.sports.football.contest.state import FootballContestState
 
 
 @dataclass(frozen=True)
 class PlayerRosterStatus:
-    """Match-time roster row: identity from Team.roster, cards from state.disciplinary."""
+    """Match-time roster row: identity from Team.roster, stats from state.player_stats."""
 
     player_number: int
     player: IndividualPlayer
@@ -32,8 +31,12 @@ def roster_status_for_team(
         PlayerRosterStatus(
             player_number=number,
             player=player,
-            yellow_cards=state.disciplinary.yellows_for(player.id),
-            dismissed=state.disciplinary.is_dismissed(player.id),
+            yellow_cards=state.player_stats[player.id].yellow_cards
+            if player.id in state.player_stats
+            else 0,
+            dismissed=state.player_stats[player.id].dismissed
+            if player.id in state.player_stats
+            else False,
         )
         for number, player in enumerate(team.roster, start=1)
     ]
@@ -42,11 +45,9 @@ def roster_status_for_team(
 def roster_status_for_match(
     state: FootballContestState,
 ) -> dict[str, list[PlayerRosterStatus]]:
-    """All squads keyed by team id — merges Team.roster with state.disciplinary."""
     result: dict[str, list[PlayerRosterStatus]] = {}
     for team in state.teams:
-        if isinstance(team, Team):
-            result[team.id] = roster_status_for_team(state, team)
+        result[team.id] = roster_status_for_team(state, team)
     return result
 
 
@@ -71,22 +72,24 @@ def format_squad_lines_from_state(
 
 
 def team_disciplinary_summary(
-    team: Team, disciplinary: DisciplinaryRecord
+    team: Team, state: FootballContestState
 ) -> tuple[int, int]:
-    yellows = sum(disciplinary.yellows_for(player.id) for player in team.roster)
-    sent_off = sum(1 for player in team.roster if disciplinary.is_dismissed(player.id))
+    yellows = 0
+    sent_off = 0
+    for player in team.roster:
+        stats = state.player_stats.get(player.id)
+        if stats is None:
+            continue
+        yellows += stats.yellow_cards
+        if stats.dismissed:
+            sent_off += 1
     return yellows, sent_off
 
 
 def print_roster_report(
     state: FootballContestState, team_number: int | None = None
 ) -> None:
-    """Console read model: roster identity from Team, cards from state.disciplinary."""
-    teams = [
-        (number, team)
-        for number, team in enumerate(state.teams, start=1)
-        if isinstance(team, Team)
-    ]
+    teams = list(enumerate(state.teams, start=1))
     if team_number is not None:
         teams = [(n, t) for n, t in teams if n == team_number]
         if not teams:
@@ -97,5 +100,5 @@ def print_roster_report(
         print(f"\n  Team {number}: {team.name}")
         for line in format_squad_lines_from_state(state, team, indent="    "):
             print(line)
-        yellows, sent_off = team_disciplinary_summary(team, state.disciplinary)
+        yellows, sent_off = team_disciplinary_summary(team, state)
         print(f"    Totals: 🟨 {yellows} | 🟥 {sent_off}")

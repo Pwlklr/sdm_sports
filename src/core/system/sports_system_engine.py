@@ -3,8 +3,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from src.core.contest import Contest
 from src.core.contest.command import Command
-from src.core.contest.contest_result import ContestOutcome
-from src.core.contest.result import Result
+from src.core.contest.contest_result import ContestOutcome, ContestResult
 from src.core.contestant.models import Contestant, IndividualPlayer, Team
 from src.core.sport.console_adapter import ConsoleAdapter
 from src.core.sport.registered_sport import RegisteredSport
@@ -28,20 +27,25 @@ class SportsSystemEngine:
 
     def register_plugin(self, plugin: SportPlugin) -> None:
         self._sports[plugin.descriptor.id] = RegisteredSport(
-            plugin.descriptor, plugin.adapter
+            plugin.descriptor,
+            plugin.adapter,
+            plugin.match_metrics_reader,
         )
 
     def register_sport(
         self,
         descriptor: SportDescriptor,
         adapter: ConsoleAdapter,
+        match_metrics_reader: Any = None,
     ) -> None:
         if adapter.descriptor != descriptor:
             raise ValueError(
                 f"Adapter descriptor '{adapter.descriptor.id}' does not match "
                 f"registered sport '{descriptor.id}'."
             )
-        self._sports[descriptor.id] = RegisteredSport(descriptor, adapter)
+        self._sports[descriptor.id] = RegisteredSport(
+            descriptor, adapter, match_metrics_reader
+        )
 
     def get_available_sports(self) -> List[RegisteredSport]:
         return list(self._sports.values())
@@ -52,6 +56,10 @@ class SportsSystemEngine:
     def get_adapter(self, sport_id: str) -> Optional[ConsoleAdapter]:
         sport = self._sports.get(sport_id)
         return sport.adapter if sport else None
+
+    def get_match_metrics_reader(self, sport_id: str) -> Any:
+        sport = self._sports.get(sport_id)
+        return sport.match_metrics_reader if sport else None
 
     def create_individual_player(
         self, name: str, metadata: Optional[Dict[str, str]] = None
@@ -138,7 +146,7 @@ class SportsSystemEngine:
         tournament.complete_match(match)
 
     def override_result(
-        self, match_id: str, result: Result, reason: str
+        self, match_id: str, result: ContestResult, reason: str
     ) -> None:
         """Set the official result outside the event log (walkover, commission, forfeit, etc.).
 
@@ -156,6 +164,6 @@ class SportsSystemEngine:
         """Convenience wrapper: override with a minimal walkover/forfeit outcome."""
         self.override_result(
             match_id,
-            ContestOutcome(winner, decided_by=reason),
+            ContestOutcome(winner=winner, decided_by=reason),
             reason=reason,
         )

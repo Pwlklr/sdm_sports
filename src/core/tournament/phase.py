@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List
 
+from src.core.tournament.ranking import head_to_head_points, single_first_place
+
 if TYPE_CHECKING:
     from src.core.contest.contest import Contest
     from src.core.contestant.models import Contestant
@@ -54,12 +56,12 @@ class TournamentPhase(ABC):
 
     @property
     def completed_contests(self) -> int:
-        return len([c for c in self.contests if c.current_state.is_completed])
+        return len([c for c in self.contests if c.current_state.is_finished])
 
     def record_match_result(self, contest: Contest) -> None:
         if contest not in self.contests:
             raise ValueError("Contest does not belong to this phase.")
-        if not contest.current_state.is_completed:
+        if not contest.current_state.is_finished:
             raise ValueError("Cannot record result for an incomplete contest.")
         self._apply_result(contest)
 
@@ -90,15 +92,7 @@ class KnockoutPhase(TournamentPhase):
         except ValueError:
             return
 
-        from src.sports.darts.contest.darts_result import DartsResult
-        from src.sports.football.contest.football_result import FootballResult
-
-        winner = None
-        if isinstance(result, FootballResult):
-            winner = result.get_winner()
-        elif isinstance(result, DartsResult):
-            winner = result.get_winner()
-
+        winner = single_first_place(result.ranking())
         if winner is not None and winner not in self._winners:
             self._winners.append(winner)
 
@@ -123,11 +117,6 @@ class GroupStagePhase(TournamentPhase):
         except ValueError:
             return
 
-        from src.sports.football.contest.football_result import FootballResult
-
-        if not isinstance(result, FootballResult):
-            return
-
         sides = contest.contestants
         if len(sides) != 2:
             return
@@ -136,29 +125,30 @@ class GroupStagePhase(TournamentPhase):
         if home.id not in self.standings or away.id not in self.standings:
             return
 
+        ranking = result.ranking()
+        if not ranking:
+            return
+
         home_row = self.standings[home.id]
         away_row = self.standings[away.id]
         home_row.played += 1
         away_row.played += 1
 
-        home_score = result.scores.get(home.id, 0)
-        away_score = result.scores.get(away.id, 0)
+        home_points, away_points = head_to_head_points(home, away, ranking)
+        home_row.points += home_points
+        away_row.points += away_points
 
-        if home_score == away_score:
+        if home_points == away_points:
             home_row.draws += 1
             away_row.draws += 1
-            home_row.points += 1
-            away_row.points += 1
             return
 
-        if home_score > away_score:
+        if home_points > away_points:
             home_row.wins += 1
             away_row.losses += 1
-            home_row.points += 3
         else:
             away_row.wins += 1
             home_row.losses += 1
-            away_row.points += 3
 
     def get_qualifiers(self) -> list[Contestant]:
         ranked = sorted(

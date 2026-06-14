@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 
 class PeriodKind(Enum):
@@ -9,62 +10,47 @@ class PeriodKind(Enum):
     EXTRA_TIME = "Extra Time"
 
 
+@dataclass(frozen=True, kw_only=True)
 class Goal:
-    def __init__(
-        self,
-        team_id: str,
-        scorer_id: Optional[str] = None,
-        minute: Optional[int] = None,
-        own_goal: bool = False,
-        penalty: bool = False,
-    ) -> None:
-        if minute is not None and minute < 0:
-            raise ValueError(f"Invalid minute: {minute}. Must be non-negative.")
-        self.team_id = team_id
-        self.scorer_id = scorer_id
-        self.minute = minute
-        self.own_goal = own_goal
-        self.penalty = penalty
+    team_id: str
+    scorer_id: Optional[str] = None
+    minute: Optional[int] = None
+    own_goal: bool = False
+    penalty: bool = False
+
+    def __post_init__(self) -> None:
+        if self.minute is not None and self.minute < 0:
+            raise ValueError(f"Invalid minute: {self.minute}. Must be non-negative.")
 
     @property
     def points(self) -> int:
         return 1
 
 
+@dataclass(frozen=True, kw_only=True)
 class MatchPeriod:
-    """Read model: goals recorded within a single half."""
+    index: int
+    length_minutes: int
+    kind: PeriodKind = PeriodKind.REGULAR
+    goals: tuple[Goal, ...] = ()
+    ended: bool = False
 
-    def __init__(
-        self, index: int, length_minutes: int, kind: PeriodKind = PeriodKind.REGULAR
-    ) -> None:
-        self.index = index
-        self.length_minutes = length_minutes
-        self.kind = kind
-        self._goals: List[Goal] = []
-        self._ended: bool = False
+    def with_goal(self, goal: Goal) -> MatchPeriod:
+        return replace(self, goals=self.goals + (goal,))
 
-    def add_goal(self, goal: Goal) -> None:
-        self._goals.append(goal)
-
-    @property
-    def goals(self) -> List[Goal]:
-        return self._goals.copy()
+    def with_ended(self) -> MatchPeriod:
+        return replace(self, ended=True)
 
     @property
     def is_finished(self) -> bool:
-        return self._ended
-
-    def end(self) -> None:
-        self._ended = True
+        return self.ended
 
 
+@dataclass(frozen=True, kw_only=True)
 class MatchLineup:
-    """Per-team match lineup: who started, who is on the bench, and substitutions used."""
-
-    def __init__(self, starting: Set[str], bench: Set[str]) -> None:
-        self.starting: Set[str] = set(starting)
-        self.bench: Set[str] = set(bench)
-        self.subs_made: int = 0
+    starting: frozenset[str]
+    bench: frozenset[str]
+    subs_made: int = 0
 
     def is_on_pitch(self, player_id: str) -> bool:
         return player_id in self.starting
@@ -72,30 +58,36 @@ class MatchLineup:
     def is_on_bench(self, player_id: str) -> bool:
         return player_id in self.bench
 
-    def substitute(self, player_out: str, player_in: str) -> None:
-        self.starting.discard(player_out)
-        self.starting.add(player_in)
-        self.bench.discard(player_in)
-        self.bench.add(player_out)
-        self.subs_made += 1
+    def with_substitution(self, player_out: str, player_in: str) -> MatchLineup:
+        starting = set(self.starting)
+        bench = set(self.bench)
+        starting.discard(player_out)
+        starting.add(player_in)
+        bench.discard(player_in)
+        bench.add(player_out)
+        return replace(
+            self,
+            starting=frozenset(starting),
+            bench=frozenset(bench),
+            subs_made=self.subs_made + 1,
+        )
 
-    def active_on_pitch(self, dismissed: Set[str]) -> int:
-        """Players currently on the pitch who have not been sent off."""
+    def active_on_pitch(self, dismissed: frozenset[str]) -> int:
         return sum(1 for player_id in self.starting if player_id not in dismissed)
 
 
+@dataclass(frozen=True, kw_only=True)
 class DisciplinaryRecord:
-    """Read model: card counts and dismissals."""
+    yellow_cards: dict[str, int] = field(default_factory=dict)
+    dismissed: frozenset[str] = frozenset()
 
-    def __init__(self) -> None:
-        self.yellow_cards: Dict[str, int] = {}
-        self.dismissed: Set[str] = set()
+    def with_yellow(self, offender_id: str) -> DisciplinaryRecord:
+        cards = dict(self.yellow_cards)
+        cards[offender_id] = cards.get(offender_id, 0) + 1
+        return replace(self, yellow_cards=cards)
 
-    def record_yellow(self, offender_id: str) -> None:
-        self.yellow_cards[offender_id] = self.yellow_cards.get(offender_id, 0) + 1
-
-    def dismiss(self, offender_id: str) -> None:
-        self.dismissed.add(offender_id)
+    def with_dismissal(self, offender_id: str) -> DisciplinaryRecord:
+        return replace(self, dismissed=self.dismissed | {offender_id})
 
     def yellows_for(self, offender_id: str) -> int:
         return self.yellow_cards.get(offender_id, 0)

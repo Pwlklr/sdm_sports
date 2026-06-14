@@ -28,7 +28,7 @@ class FootballConsoleView(Observer):
             if not isinstance(team, Team):
                 continue
             goals = state.scores[team.id]
-            yellows, sent_off = team_disciplinary_summary(team, state.disciplinary)
+            yellows, sent_off = team_disciplinary_summary(team, state)
             card_info = ""
             if yellows:
                 card_info += f" | 🟨 {yellows}"
@@ -49,7 +49,7 @@ class FootballConsoleView(Observer):
 
         print("-" * 45)
 
-        if state.is_completed:
+        if state.is_finished:
             if state.was_draw:
                 print("🤝 FULL TIME — DRAW 🤝".center(45))
             elif state.winner is not None:

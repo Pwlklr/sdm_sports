@@ -37,7 +37,7 @@ class FootballVarValidationHandler(ReversalHandler):
         if not isinstance(state, FootballContestState):
             reject("VAR jest dostepne tylko w meczu pilki noznej.")
 
-        if state.is_completed:
+        if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna zastosowac VAR.")
 
         target = _event_by_id(ctx, ctx.command.target_event_id)
