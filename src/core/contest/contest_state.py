@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Protocol, Self
+from typing import Protocol
+from typing_extensions import Self
 
 from src.core.contest.event import Event
 from src.core.contestant.models import Contestant

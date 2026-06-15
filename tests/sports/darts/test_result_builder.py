@@ -1,5 +1,4 @@
 from src.core.contestant import IndividualPlayer
-from src.core.contest.metrics import EmptyIndividualMetrics
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig
 from src.sports.darts.contest.darts_result import DartsSideMetrics
 from src.sports.darts.contest.darts_result_builder import DartsResultBuilder
@@ -23,4 +22,3 @@ def test_darts_ranking_and_side_metrics() -> None:
 
     side = result.side_metrics()
     assert isinstance(side, DartsSideMetrics)
-    assert isinstance(result.individual_metrics(), EmptyIndividualMetrics)

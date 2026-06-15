@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from src.core.contest.contest_result import ContestResult, RankedEntry
 from src.core.contest.metrics import SideMetrics
-from src.sports.darts.contest.darts_result import DartsSideMetrics
 
 
 @dataclass(frozen=True, kw_only=True)
