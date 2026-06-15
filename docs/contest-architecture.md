@@ -251,6 +251,19 @@ CoR służy wyłącznie do zbudowania markerów `EventReversed`; faktyczna zmian
 
 ---
 
+## 10. Zrealizowane Wzorce Projektowe (Wymaganie projektowe)
+
+Architektura systemu celowo wykorzystuje ugruntowane wzorce projektowe do zarządzania złożonością dyscyplin sportowych:
+
+1. **Event Sourcing** – `Contest` nie przechowuje swojego ostatecznego stanu mutowalnego. Prawdą jest dopisywana lista zdarzeń (`_history`). Stan (`ContestState`) jest jedynie wypadkową (projekcją) wyliczaną poprzez sekwencyjne wywołanie metody `apply()`. Zapewnia to idealną odtwarzalność meczu i ułatwia cofanie akcji.
+2. **Strategy (Strategia)** – logika i reguły poszczególnych dyscyplin są wydzielone do zewnętrznych klas (`RuleSet`). Główny agregat (`Contest`) nie posiada instrukcji `if sport == "football"`, lecz deleguje decyzje do wstrzykniętej strategii.
+3. **Builder (Budowniczy)** – z uwagi na złożoność wyliczania ostatecznego wyniku (ranking + rozbudowane statystyki zawodników w różnych sportach), zadanie to zostało wyciągnięte do klas implementujących `ResultBuilder` (np. `FootballResultBuilder`). Builder materializuje gotowy snapshot wyniku (`ContestResult`) bazując na obecnym stanie.
+4. **Chain of Responsibility (Łańcuch Zobowiązań)** – wykorzystany przy obsłudze unieważniania/cofania zdarzeń domenowych (`ReversalChain`). Żądanie cofnięcia akcji przechodzi przez łańcuch ewaluatorów, które decydują czy da się wygenerować `EventReversed`, czy należy zgłosić błąd.
+5. **Observer (Obserwator)** – agregat sportowy (`Contest`) posiada mechanizm subskrypcji i emituje notyfikacje (`notify()`) po każdej skutecznej zmianie w swoim logu zdarzeń. Pozwala to na asynchroniczne reagowanie systemu (np. odświeżenie widoku lub przeliczenie tabeli turniejowej) bez twardego sprzęgania.
+6. **Factory Method / Abstract Factory** – abstrakcja `ContestFactory` ukrywa skomplikowany proces tworzenia meczu. Każdy plugin sportowy dostarcza swój własny mechanizm budowy (`_build_football_contest`), który składa kompletny obiekt wstrzykując mu odpowiedni State, RuleSet i Builder.
+
+---
+
 ## Zasada nadrzędna
 
 **Log decyduje o prawdzie, RuleSet o regułach, State o danych (immutable), ResultBuilder o wyniku, MatchMetricsReader o agregacji turniejowej.**
