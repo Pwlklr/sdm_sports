@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from src.core.contest.command import Command
 from src.core.contest import Contest
-from src.core.contest_event import ContestEvent
-from src.core.contest_state import ContestState
-from src.core.ruleset import RuleSet
+from tests.core.contest_test_support import StatefulContestState, make_contest
+from src.core.contest.event import Event
 from src.core.contestant import Contestant
-from src.core.tournament_phase import TournamentPhase, DrawStrategy
+from src.core.contest.rule_set import RuleSet
+from src.core.tournament.phase import DrawStrategy, TournamentPhase
 
 
 class DummyContestant(Contestant):
@@ -26,51 +29,64 @@ class DummyContestant(Contestant):
         return self._name
 
 
-class DummyState(ContestState):
+@dataclass(frozen=True, kw_only=True)
+class EndCommand(Command):
     pass
 
 
-class DummyEvent(ContestEvent):
-    action_type: str
+@dataclass(frozen=True, kw_only=True)
+class EndFact(Event):
+    pass
 
-    def __init__(self, action_type: str) -> None:
-        super().__init__()
-        self.action_type = action_type
+
+class DummyState(StatefulContestState):
+    def apply(self, fact: Event) -> DummyState:
+        if isinstance(fact, EndFact):
+            finished = DummyState(self.contestants)
+            finished._finished = True
+            return finished
+        return DummyState(self.contestants)
+
+    def reset(self) -> DummyState:
+        return DummyState(self.contestants)
 
 
 class DummyRuleSet(RuleSet):
-    handlers = {
-        DummyEvent: lambda self, event, state: DummyRuleSet._on_dummy(
-            self, event, state
-        ),
-    }
+    def decide_end(self, command: EndCommand, state: DummyState) -> list[Event]:
+        return [EndFact()]
 
-    def _on_dummy(self, event: ContestEvent, state: ContestState) -> list[ContestEvent]:
-        if getattr(event, "action_type", "") == "END":
-            state.is_final = True
-        return []
+    command_handlers = {EndCommand: decide_end}
+    reaction_handlers = {}
 
 
 class DummyDrawStrategy(DrawStrategy):
-    def generate_draw(self, contestants: list[Contestant]) -> list[tuple[Contestant, Contestant]]:
+    def generate_draw(
+        self, contestants: list[Contestant]
+    ) -> list[tuple[Contestant, Contestant]]:
         return []
 
 
 class DummyPhase(TournamentPhase):
-    pass
+    def _apply_result(self, contest: Contest) -> None:
+        pass
+
+    def get_qualifiers(self) -> list[Contestant]:
+        return []
 
 
 def test_tournament_phase_observes_contest_completion() -> None:
     team_a = DummyContestant(name="Team A", contestant_id="T1")
     team_b = DummyContestant(name="Team B", contestant_id="T2")
 
-    contest = Contest([team_a, team_b], DummyState(), DummyRuleSet(), contest_id="C1")
+    contest = make_contest(
+        DummyState([team_a, team_b]), DummyRuleSet(), contest_id="C1"
+    )
     phase = DummyPhase("Phase-1", DummyDrawStrategy())
 
     phase.add_contest(contest)
 
     assert phase.completed_contests == 0
 
-    contest.process_event(DummyEvent("END"))
+    contest.handle(EndCommand())
 
     assert phase.completed_contests == 1
