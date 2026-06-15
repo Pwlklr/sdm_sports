@@ -41,17 +41,23 @@ return Contest(assembly.state, assembly.ruleset, assembly.result_builder, contes
 
 ---
 
-## 2. Model wyniku — trzy fasety
+## 2. Model wyniku — dwie fasety
 
 `ContestResult` to opublikowany snapshot zakończonego meczu:
 
 | Faseta | Odpowiedzialność | Kto czyta |
 |--------|------------------|-----------|
 | `ranking()` | miejsca w meczu (ex-aequo przy remisie) | `TournamentResultReader` |
-| `side_metrics()` | agregaty per strona/contestant | Darts: jedyne źródło metryk |
-| `individual_metrics()` | statystyki per zawodnik | Football: zawieszenia, strzelcy |
+| `side_metrics()` | agregaty per strona/contestant | wszystkie metryki meczu |
 
-**Stan vs wynik:** `ContestantStats` w `ContestState` = live projection (aktualizowane przez `apply`). `ResultBuilder` materializuje snapshot do `side_metrics` / `individual_metrics` — downstream nie sięga do stanu po zakończeniu meczu.
+**Zagnieżdżenie individual w side:** statystyki zawodników nie są osobną fasetą interfejsu — siedzą w `side_metrics`:
+
+- **Darts** (gracz = strona): `DartsSideMetrics.by_contestant_id` — sets, legs, darts_thrown
+- **Football** (drużyna + skład): `FootballSideMetrics.by_team_id[team].players[player_id]` — gole, kartki, asysty
+
+`MatchMetricsReader` czyta wyłącznie `side_metrics()` (football: `side.all_players()`, darts: `by_contestant_id`).
+
+**Stan vs wynik:** `ContestantStats` w `ContestState` = live projection. `ResultBuilder` materializuje snapshot do `side_metrics` — downstream nie sięga do stanu po zakończeniu meczu.
 
 `OfficialResultView` trzyma `played` (z buildera po replay) i opcjonalny `official` (walkover, korekta komisji). `ContestOutcome` implementuje `ContestResult` z pustymi metrykami.
 
@@ -111,8 +117,6 @@ class ContestResult(ABC):
     def ranking(self) -> tuple[RankedEntry, ...]: ...
     @abstractmethod
     def side_metrics(self) -> SideMetrics: ...
-    @abstractmethod
-    def individual_metrics(self) -> IndividualMetrics: ...
 ```
 
 Implementacje: `class DartsResult(ContestResult)`, `class FootballResult(ContestResult)`, `class ContestOutcome(ContestResult)`.
@@ -143,7 +147,7 @@ Tabela `_appliers` + czyste funkcje `_apply_*` zwracające `replace(state, ...)`
 |---------|--------------|
 | `RuleSet` | „Czy wolno?”, „Co się wydarzyło?” → emituje `Event` |
 | `State.apply` | „Jak event zmienia dane meczu?” |
-| `ResultBuilder` | „Jaki jest sportowy wynik z aktualnej projekcji?” (3 fasety) |
+| `ResultBuilder` | „Jaki jest sportowy wynik z aktualnej projekcji?” (ranking + side_metrics) |
 
 ---
 
@@ -154,26 +158,24 @@ class ResultBuilder(Protocol):
     def build(self, state: ContestState) -> ContestResult: ...
 ```
 
-Sportowe implementacje (`FootballResultBuilder`, `DartsResultBuilder`) budują jednocześnie ranking, side_metrics i individual_metrics.
+Sportowe implementacje (`FootballResultBuilder`, `DartsResultBuilder`) budują ranking i `side_metrics` (z zagnieżdżonymi statystykami graczy w piłce).
 
-Przykład football — remis ex-aequo: obie drużyny `place=1`.
-
-Darts — gracz = strona; `individual_metrics()` zwraca `EmptyIndividualMetrics`.
+Przykład football — remis ex-aequo: obie drużyny `place=1`. Statystyki graczy w `FootballTeamSideMetrics.players`.
 
 ---
 
 ## 6. Warstwa odczytu metryk
 
-| Reader | Faseta | Przypadek użycia |
+| Reader | Źródło | Przypadek użycia |
 |--------|--------|------------------|
 | `TournamentResultReader` | `ranking()` | punkty H2H, awans knockout |
-| `MatchMetricsReader` | `side_metrics()` / `individual_metrics()` | zawieszenia, strzelcy, statystyki turniejowe |
+| `MatchMetricsReader` | `side_metrics()` | zawieszenia, strzelcy, statystyki turniejowe |
 
 Rejestracja readerów w `SportPlugin.match_metrics_reader`; dostęp przez `SportsSystemEngine.get_match_metrics_reader(sport_id)`.
 
-Football: `FootballMatchMetricsReader.accrue_disciplinary(result, board)` czyta `individual_metrics()`.
+Football: `FootballMatchMetricsReader.accrue_disciplinary(result, board)` czyta `side.all_players()`.
 
-Darts: `DartsMatchMetricsReader.player_totals(result)` czyta `side_metrics()`.
+Darts: `DartsMatchMetricsReader.player_totals(result)` czyta `side.by_contestant_id`.
 
 ---
 
@@ -220,7 +222,7 @@ CoR służy wyłącznie do zbudowania markerów `EventReversed`; faktyczna zmian
 
 ### C. Wynik
 
-- **`XxxResult`** — implementuje `ContestResult` (3 fasety)
+- **`XxxResult`** — implementuje `ContestResult` (ranking + side_metrics)
 - **`XxxResultBuilder`** — buduje wynik ze stanu
 - **`XxxMatchMetricsReader`** — ekstrakcja metryk do turnieju (opcjonalnie)
 
