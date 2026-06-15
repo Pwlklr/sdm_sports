@@ -192,7 +192,7 @@ Sportowe `DartsResult` / `FootballResult` **implementują** `ContestResult` (ABC
 
 ---
 
-## 8. Flow obsługi reverse command
+## 9. Flow obsługi reverse command
 
 Bez zmian względem poprzedniej architektury:
 
@@ -205,7 +205,7 @@ CoR służy wyłącznie do zbudowania markerów `EventReversed`; faktyczna zmian
 
 ---
 
-## 8. Co musi zdefiniować nowy sport
+## 10. Co musi zdefiniować nowy sport
 
 ### A. Model domeny
 
@@ -239,7 +239,7 @@ CoR służy wyłącznie do zbudowania markerów `EventReversed`; faktyczna zmian
 
 ---
 
-## 9. Podsumowanie przepływów
+## 11. Podsumowanie przepływów
 
 | Akcja | Ścieżka | Mutacja stanu |
 |-------|---------|---------------|
@@ -251,7 +251,7 @@ CoR służy wyłącznie do zbudowania markerów `EventReversed`; faktyczna zmian
 
 ---
 
-## 10. Zrealizowane Wzorce Projektowe (Wymaganie projektowe)
+## 12. Zrealizowane Wzorce Projektowe (Wymaganie projektowe)
 
 Architektura systemu celowo wykorzystuje ugruntowane wzorce projektowe do zarządzania złożonością dyscyplin sportowych:
 
