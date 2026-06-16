@@ -5,7 +5,12 @@ from dataclasses import replace
 from src.core.contest import Contest
 from src.core.shared.command_rejected import CommandRejected
 from src.core.contestant.models import IndividualPlayer, Team
-from src.sports.football.contest.commands import CommitFoul, ScoreGoal, StartMatch, SubmitLineup
+from src.sports.football.contest.commands import (
+    CommitFoul,
+    ScoreGoal,
+    StartMatch,
+    SubmitLineup,
+)
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.football_rule_set import FootballRuleSet
 from src.sports.football.contest.football_contest_state import (

@@ -31,13 +31,7 @@ def _team_name(state: FootballContestState, team_id: str) -> str:
 
 def _label_event(state: FootballContestState, event: Event) -> str:
     if isinstance(event, GoalScored):
-        kind = (
-            "own goal"
-            if event.own_goal
-            else "penalty"
-            if event.penalty
-            else "goal"
-        )
+        kind = "own goal" if event.own_goal else "penalty" if event.penalty else "goal"
         scorer = player_name_for_id(state, event.scorer_id)
         scorer_text = f" {scorer}" if scorer else ""
         return f"{event.minute}' {kind} {_team_name(state, event.team_id)}{scorer_text}"

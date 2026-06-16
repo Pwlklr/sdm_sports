@@ -115,9 +115,7 @@ class FootballConsoleAdapter(ConsoleAdapter):
 
         if len(parts) == 1:
             title = (
-                "VAR: choose goal to disallow"
-                if goals_only
-                else "Events to reverse"
+                "VAR: choose goal to disallow" if goals_only else "Events to reverse"
             )
             for line in format_reversal_menu(
                 catalog,

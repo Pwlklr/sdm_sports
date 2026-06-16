@@ -21,9 +21,7 @@ def _match():
     away.add_player(IndividualPlayer("Other", "other"))
     adapter = FootballConsoleAdapter()
     config = FootballMatchConfig(players_on_pitch=1, min_players_on_pitch=1)
-    match = create_console_contest(
-        FOOTBALL_SPORT.id, adapter, [home, away], config
-    )
+    match = create_console_contest(FOOTBALL_SPORT.id, adapter, [home, away], config)
     match.handle(StartMatch())
     submit_all_lineups(match)
     return match, adapter

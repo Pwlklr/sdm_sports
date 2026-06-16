@@ -70,9 +70,7 @@ def format_pitch_and_bench_lines_from_state(
         key=lambda pid: _player_number(team, pid) or 999,
     )
     for player_id in on_pitch_ids:
-        line = _format_line_for_player(
-            team, state, player_id, indent=f"{indent}  "
-        )
+        line = _format_line_for_player(team, state, player_id, indent=f"{indent}  ")
         if line is not None:
             lines.append(line)
 
@@ -82,9 +80,7 @@ def format_pitch_and_bench_lines_from_state(
         key=lambda pid: _player_number(team, pid) or 999,
     )
     for player_id in bench_ids:
-        line = _format_line_for_player(
-            team, state, player_id, indent=f"{indent}  "
-        )
+        line = _format_line_for_player(team, state, player_id, indent=f"{indent}  ")
         if line is not None:
             lines.append(line)
     return lines

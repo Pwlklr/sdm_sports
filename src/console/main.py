@@ -310,7 +310,9 @@ def select_squad_from_team(
             print("Invalid input.")
             continue
         if len(numbers) < min_players or len(numbers) > max_players:
-            print(f"Squad must contain between {min_players} and {max_players} players.")
+            print(
+                f"Squad must contain between {min_players} and {max_players} players."
+            )
             continue
         if len(set(numbers)) != len(numbers):
             print("Duplicate player numbers are not allowed.")
@@ -618,9 +620,7 @@ def main() -> None:
 
         elif choice == "4":
             suspended_ids = [
-                mid
-                for mid, m in engine.active_matches.items()
-                if m.is_suspended
+                mid for mid, m in engine.active_matches.items() if m.is_suspended
             ]
             if not suspended_ids:
                 print("No matches currently suspended in memory.")

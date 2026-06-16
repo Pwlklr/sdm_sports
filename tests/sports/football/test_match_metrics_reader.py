@@ -23,7 +23,9 @@ def test_match_metrics_reader_top_scorers() -> None:
     concluded = MatchConcluded(winner_id=None, draw=True)
     state = state.apply(concluded)
 
-    result = FootballResultBuilder(config=FootballMatchConfig()).build(state, [concluded])
+    result = FootballResultBuilder(config=FootballMatchConfig()).build(
+        state, [concluded]
+    )
     scorers = FootballMatchMetricsReader().top_scorers(result)
 
     assert scorers == [("p1", 2)]

@@ -51,16 +51,10 @@ def build_match_timeline(contest: Contest) -> list[str]:
     lines: list[str] = []
     for event in contest.history:
         if isinstance(event, PeriodStarted):
-            lines.append(
-                f"-- {event.kind.value} (period {event.index + 1}) started"
-            )
+            lines.append(f"-- {event.kind.value} (period {event.index + 1}) started")
         elif isinstance(event, GoalScored):
             label = (
-                "own goal"
-                if event.own_goal
-                else "penalty"
-                if event.penalty
-                else "goal"
+                "own goal" if event.own_goal else "penalty" if event.penalty else "goal"
             )
             scorer = player_name_for_id(state, event.scorer_id)
             scorer_text = f" {scorer}" if scorer else ""

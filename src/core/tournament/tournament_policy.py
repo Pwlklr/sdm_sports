@@ -170,9 +170,7 @@ def _validate_players_in_roster(
     if isinstance(contestant, IndividualPlayer):
         for player_id in player_ids:
             if player_id != contestant.id:
-                reject(
-                    f"Player '{player_id}' is not contestant {contestant.name}."
-                )
+                reject(f"Player '{player_id}' is not contestant {contestant.name}.")
 
 
 def _validate_squad_for_contestant(

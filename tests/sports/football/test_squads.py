@@ -194,7 +194,9 @@ def test_red_card_carries_over_as_suspension() -> None:
     )
 
     state = replace(match.current_state, is_finished=True)
-    result = FootballResultBuilder(config=FootballMatchConfig()).build(state, match.history)
+    result = FootballResultBuilder(config=FootballMatchConfig()).build(
+        state, match.history
+    )
     snapshot = FootballPhaseOutcomeInterpreter().interpret(match.id, result)
     carryover = FootballDisciplineCarryover()
     discipline = DisciplineState()
