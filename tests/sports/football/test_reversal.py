@@ -11,7 +11,11 @@ from src.sports.football.contest.commands import (
     SubstitutePlayer,
     VarOverturnGoal,
 )
-from src.sports.football.contest.events import GoalScored, PlayerCautioned, PlayerDismissed
+from src.sports.football.contest.events import (
+    GoalScored,
+    PlayerCautioned,
+    PlayerDismissed,
+)
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.core.contest import ContestFactory
 from src.sports.football.descriptor import FOOTBALL_SPORT

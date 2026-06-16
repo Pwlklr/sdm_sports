@@ -12,6 +12,7 @@ from src.core.tournament.command import (
     PerformDraw,
     RecordMatchOutcome,
     RegisterContestant,
+    RegisterSquad,
     TournamentCommand,
 )
 from src.core.tournament.event import (
@@ -24,6 +25,7 @@ from src.core.tournament.event import (
     RegistrationClosed,
     RegistrationOpened,
     RoundCompleted,
+    SquadRegistered,
     SuspensionIssued,
     TournamentCompleted,
     TournamentEvent,
@@ -45,7 +47,7 @@ from src.core.tournament.match_provider import MatchProvider
 from src.core.tournament.phase import Phase, PhaseSchedulingStatus, PhaseStatus
 from src.core.tournament.phase_format import PhaseFormat
 from src.core.tournament.phase_outcome_interpreter import PhaseOutcomeInterpreter
-from src.core.tournament.phase_standings_view import PhaseStandingsView
+from src.core.tournament.phase_qualifiers import PhaseQualifiers
 from src.core.tournament.phase_state import (
     BracketPhaseState,
     BracketSlot,
@@ -56,7 +58,9 @@ from src.core.tournament.phase_state import (
 from src.core.tournament.scheduling_mode import SchedulingMode
 from src.core.tournament.sport_tournament_profile import SportTournamentProfile
 from src.core.tournament.sport_tournament_registry import SportTournamentRegistry
+from src.core.tournament.squad_policy import PermissiveSquadPolicy, SquadPolicy
 from src.core.tournament.tournament import Tournament
+from src.core.tournament.tournament_entry import TournamentEntry
 from src.core.tournament.tournament_policy import (
     DefaultTournamentPolicy,
     TournamentPolicy,
@@ -93,7 +97,7 @@ __all__ = [
     "PhaseFormat",
     "PhaseOutcomeInterpreter",
     "PhaseSchedulingStatus",
-    "PhaseStandingsView",
+    "PhaseQualifiers",
     "PhaseStarted",
     "PhaseStatus",
     "PointsDeltaSnapshot",
@@ -102,6 +106,7 @@ __all__ = [
     "RankedPlaceSnapshot",
     "RecordMatchOutcome",
     "RegisterContestant",
+    "RegisterSquad",
     "RegistrationClosed",
     "RegistrationOpened",
     "RoundCompleted",
@@ -109,6 +114,9 @@ __all__ = [
     "RoundRobinScheduler",
     "ScheduledPairing",
     "SchedulingMode",
+    "SquadPolicy",
+    "PermissiveSquadPolicy",
+    "SquadRegistered",
     "SportTournamentProfile",
     "SportTournamentRegistry",
     "SuspensionIssued",
@@ -117,6 +125,7 @@ __all__ = [
     "TournamentBlueprintFactory",
     "TournamentCommand",
     "TournamentCompleted",
+    "TournamentEntry",
     "TournamentEvent",
     "TournamentPolicy",
     "TournamentProjectionEvent",

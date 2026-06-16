@@ -3,9 +3,12 @@ from __future__ import annotations
 from typing import ClassVar
 
 from src.core.contest.command import Command
-from src.core.contest.event import Event, EventReversed
+from src.core.contest.event import Event, EventReversed, OfficialOverrideEvent
 from src.core.contestant.models import Contestant, Team
+from src.core.contest.reversal_chain import ReversalHandler
 from src.core.contest.rule_set import Handler, RuleSet
+from src.core.contest.walkover_mixin import WalkoverMixin
+from src.core.contest.contest_state import ContestState
 from src.core.shared.command_rejected import reject
 from src.sports.football.contest.commands import (
     AwardWalkover,
@@ -41,7 +44,10 @@ from src.sports.football.contest.roster import (
     player_name_for_id,
     player_on_team,
 )
-from src.sports.football.contest.football_contest_state import FootballContestState, MatchPhase
+from src.sports.football.contest.football_contest_state import (
+    FootballContestState,
+    MatchPhase,
+)
 
 
 class FootballCoreRules:
@@ -51,9 +57,14 @@ class FootballCoreRules:
         self, command: StartMatch, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
-            reject("Mecz jest juz zakonczony.")
+            reject("Match is already finished.")
         if state.match_started:
-            reject("Mecz zostal juz rozpoczety.")
+            reject("Match has already started.")
+        eligible_map = state.eligible_player_ids
+        if isinstance(eligible_map, dict) and eligible_map:
+            for team in state.teams:
+                if state.lineup_for(team.id) is None:
+                    reject(f"Submit match squad for {team.name} before starting.")
         return [
             MatchStarted(),
             PeriodStarted(kind=PeriodKind.REGULAR, index=0),
@@ -63,22 +74,30 @@ class FootballCoreRules:
         self, command: ScoreGoal, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
-            reject("Mecz jest zakonczony - nie mozna strzelic gola.")
+            reject("Match is finished - cannot score a goal.")
         if state.phase == MatchPhase.PENALTIES:
-            reject("Trwa seria rzutow karnych - uzyj 'pk'.")
+            reject("Penalty shootout in progress - use 'pk'.")
         period = state.current_period
         if period is None or period.is_finished:
-            reject("Brak aktywnego okresu gry - rozpocznij okres.")
+            reject("No active period - start a period.")
 
         team = state.teams[command.team_index]
         if not isinstance(team, Team):
-            reject("Nieprawidlowa druzyna.")
+            reject("Invalid team.")
         if command.scorer_id is not None and not player_on_team(
             team, command.scorer_id
         ):
-            reject("Wskazany strzelec nie nalezy do tej druzyny.")
+            reject("Indicated scorer does not belong to this team.")
+        if command.scorer_id is not None:
+            lineup = state.lineup_for(team.id)
+            if lineup is None:
+                reject("Submit this team's lineup before assigning a scorer.")
+            if not lineup.is_on_pitch(command.scorer_id):
+                reject("Indicated scorer is not on the pitch.")
+            if state.disciplinary.is_dismissed(command.scorer_id):
+                reject("Dismissed player cannot score.")
         if not _valid_minute(command.minute, state):
-            reject(f"Minuta {command.minute} jest poza czasem gry.")
+            reject(f"Minute {command.minute} is outside match time.")
         credited = state.opponent_of(team) if command.own_goal else team
         return [
             GoalScored(
@@ -94,12 +113,12 @@ class FootballCoreRules:
         self, command: EndPeriod, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
-            reject("Mecz jest zakonczony.")
+            reject("Match is finished.")
         if state.phase == MatchPhase.PENALTIES:
-            reject("Trwa seria rzutow karnych - nie konczy sie okresow.")
+            reject("Penalty shootout in progress - periods cannot be ended.")
         period = state.current_period
         if period is None or period.is_finished:
-            reject("Brak aktywnego okresu do zakonczenia.")
+            reject("No active period to end.")
         return [PeriodEnded(kind=period.kind)]
 
     def react_period_ended(
@@ -116,7 +135,10 @@ class FootballCoreRules:
             return _after_regulation(state)
 
         if state.phase == MatchPhase.EXTRA_TIME:
-            if state.count_periods(PeriodKind.EXTRA_TIME) < state.config.extra_time_halves:
+            if (
+                state.count_periods(PeriodKind.EXTRA_TIME)
+                < state.config.extra_time_halves
+            ):
                 return [
                     PeriodStarted(
                         kind=PeriodKind.EXTRA_TIME,
@@ -144,21 +166,26 @@ class FootballDisciplineRules:
         self, command: CommitFoul, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
-            reject("Mecz jest zakonczony - nie mozna zglosic przewinienia.")
+            reject("Match is finished - cannot report a foul.")
 
         team = state.teams[command.team_index]
         if not isinstance(team, Team):
-            reject("Nieprawidlowa druzyna.")
+            reject("Invalid team.")
 
         if command.card in {"yellow", "red"}:
             if command.offender_id is None:
-                reject("Brak wskazanego zawodnika dla kartki.")
+                reject("No player indicated for the card.")
             if not player_on_team(team, command.offender_id):
-                reject("Wskazany zawodnik nie nalezy do tej druzyny.")
+                reject("Indicated player does not belong to this team.")
+            lineup = state.lineup_for(team.id)
+            if lineup is None:
+                reject("Submit this team's lineup first.")
+            if not lineup.is_on_pitch(command.offender_id):
+                reject("Indicated player is not on the pitch.")
             if state.disciplinary.is_dismissed(command.offender_id):
-                reject("Zawodnik zostal juz wykluczony z gry.")
+                reject("Player has already been sent off.")
             if not _valid_minute(command.minute, state):
-                reject(f"Minuta {command.minute} jest poza czasem gry.")
+                reject(f"Minute {command.minute} is outside match time.")
             if command.card == "red":
                 return [
                     PlayerDismissed(
@@ -227,12 +254,15 @@ class FootballKnockoutRules:
     """Extra time, golden goal and penalty shootout."""
 
     def decide_take_penalty_kick(
-        self, command: TakePenaltyKick, state: FootballContestState, history: list[Event]
+        self,
+        command: TakePenaltyKick,
+        state: FootballContestState,
+        history: list[Event],
     ) -> list[Event]:
         if state.is_finished:
-            reject("Mecz jest zakonczony.")
+            reject("Match is finished.")
         if state.phase != MatchPhase.PENALTIES:
-            reject("Rzuty karne dostepne tylko w serii rzutow karnych.")
+            reject("Penalty kicks are only available during the shootout.")
         team = state.teams[command.team_index]
         return [PenaltyKickTaken(team_id=team.id, scored=command.scored)]
 
@@ -282,37 +312,46 @@ class FootballSquadRules:
         self, command: SubmitLineup, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
-            reject("Mecz jest zakonczony - nie mozna zglosic skladu.")
+            reject("Match is finished - cannot submit a lineup.")
 
         team = state.teams[command.team_index]
         if not isinstance(team, Team):
-            reject("Nieprawidlowa druzyna.")
+            reject("Invalid team.")
 
         starting = list(command.starting)
         bench = list(command.bench)
 
         if not starting:
-            reject("Sklad podstawowy nie moze byc pusty.")
+            reject("Starting lineup cannot be empty.")
         if len(set(starting)) != len(starting) or len(set(bench)) != len(bench):
-            reject("Powtorzony zawodnik w zgloszonym skladzie.")
+            reject("Duplicate player in the submitted lineup.")
         if set(starting) & set(bench):
-            reject("Zawodnik nie moze byc jednoczesnie w skladzie i na lawce.")
+            reject("A player cannot be both in the lineup and on the bench.")
         if len(starting) > state.config.players_on_pitch:
             reject(
-                f"Sklad podstawowy moze liczyc maksymalnie {state.config.players_on_pitch} zawodnikow."
+                "Starting lineup may contain at most "
+                f"{state.config.players_on_pitch} players."
             )
         if len(starting) < state.config.players_on_pitch:
             reject(
-                f"Sklad podstawowy musi liczyc co najmniej {state.config.players_on_pitch} zawodnikow "
-                f"(obecnie {len(starting)})."
+                "Starting lineup must contain at least "
+                f"{state.config.players_on_pitch} players "
+                f"(currently {len(starting)})."
             )
         for player_id in starting + bench:
             if not player_on_team(team, player_id):
                 name = player_name_for_id(state, player_id) or player_id
-                reject(f"Zawodnik {name} nie nalezy do druzyny {team.name}.")
+                reject(f"Player {name} does not belong to team {team.name}.")
             if state.is_suspended(player_id):
                 name = player_name_for_id(state, player_id) or player_id
-                reject(f"Zawodnik {name} jest zawieszony i nie moze byc zgloszony.")
+                reject(f"Player {name} is suspended and cannot be selected.")
+            eligible_map = state.eligible_player_ids
+            if isinstance(eligible_map, dict) and team.id in eligible_map:
+                if player_id not in eligible_map[team.id]:
+                    name = player_name_for_id(state, player_id) or player_id
+                    reject(
+                        f"Player {name} is not on the tournament squad for {team.name}."
+                    )
 
         return [
             LineupSubmitted(
@@ -323,26 +362,32 @@ class FootballSquadRules:
         ]
 
     def decide_substitute_player(
-        self, command: SubstitutePlayer, state: FootballContestState, history: list[Event]
+        self,
+        command: SubstitutePlayer,
+        state: FootballContestState,
+        history: list[Event],
     ) -> list[Event]:
         if state.is_finished:
-            reject("Mecz jest zakonczony - nie mozna dokonac zmiany.")
+            reject("Match is finished - cannot make a substitution.")
 
         team = state.teams[command.team_index]
         if not isinstance(team, Team):
-            reject("Nieprawidlowa druzyna.")
+            reject("Invalid team.")
 
         lineup = state.lineup_for(team.id)
         if lineup is None:
-            reject("Najpierw zglos sklad tej druzyny.")
+            reject("Submit this team's lineup first.")
         if not lineup.is_on_pitch(command.player_out):
-            reject("Zawodnik schodzacy nie znajduje sie na boisku.")
+            reject("The player coming off is not on the pitch.")
         if state.disciplinary.is_dismissed(command.player_out):
-            reject("Nie mozna zmienic zawodnika, ktory zostal wykluczony.")
+            reject("Cannot substitute a player who has been sent off.")
         if not lineup.is_on_bench(command.player_in):
-            reject("Zawodnik wchodzacy nie znajduje sie na lawce rezerwowych.")
+            reject("The player coming on is not on the bench.")
         if lineup.subs_made >= state.config.max_substitutions:
-            reject(f"Limit zmian ({state.config.max_substitutions}) zostal osiagniety.")
+            reject(
+                f"Substitution limit ({state.config.max_substitutions}) "
+                "has been reached."
+            )
 
         return [
             PlayerSubstituted(
@@ -359,56 +404,65 @@ class FootballSquadRules:
     }
 
 
-class FootballAdminRules:
+class FootballAdminRules(WalkoverMixin):
     """Post-match corrections and administrative walkover / result override."""
 
-    def decide_award_walkover(
-        self, command: AwardWalkover, state: FootballContestState, history: list[Event]
+    def _walkover_conclusion(
+        self, winner_id: str, reason: str, **kwargs: object
     ) -> list[Event]:
-        winner = state.team_by_id(command.winner_id)
-        if winner is None:
-            reject("Nieprawidlowa druzyna zwycieska.")
+        draw = bool(kwargs.get("draw", False))
+        return [MatchConcluded(winner_id=winner_id, draw=draw, decided_by=reason)]
 
-        if state.match_started and not state.is_finished:
-            reject("Mecz trwa - walkover administracyjny niedostepny w trakcie gry.")
-
-        if not state.is_finished:
-            return [
-                MatchConcluded(
-                    winner_id=winner.id,
-                    draw=False,
-                    decided_by=command.reason,
-                )
-            ]
-
+    def _walkover_override(
+        self, winner_id: str, reason: str, **kwargs: object
+    ) -> list[OfficialOverrideEvent]:
+        ws = kwargs.get("winner_score", 3)
+        ls = kwargs.get("loser_score", 0)
         return [
             ContestResultOverridden(
-                winner_id=winner.id,
-                reason=command.reason,
-                winner_score=command.winner_score,
-                loser_score=command.loser_score,
+                winner_id=winner_id,
+                reason=reason,
+                winner_score=ws if isinstance(ws, int) else 3,
+                loser_score=ls if isinstance(ls, int) else 0,
             )
         ]
 
+    def decide_award_walkover(
+        self, command: AwardWalkover, state: ContestState, history: list[Event]
+    ) -> list[Event]:
+        winner = state.team_by_id(command.winner_id)  # type: ignore[attr-defined]
+        if winner is None:
+            reject("Invalid winning team.")
+        return self._resolve_walkover(
+            winner.id,
+            command.reason,
+            state,
+            winner_score=command.winner_score,
+            loser_score=command.loser_score,
+        )
+
     def decide_correct_goal_scorer(
-        self, command: CorrectGoalScorer, state: FootballContestState, history: list[Event]
+        self,
+        command: CorrectGoalScorer,
+        state: FootballContestState,
+        history: list[Event],
     ) -> list[Event]:
         if not state.is_finished:
-            reject("Mecz nie jest zakonczony - korekta strzelca niedostepna.")
+            reject("Match is not finished - scorer correction unavailable.")
 
         target = _active_goal_scored(history, command.goal_event_id)
         if target is None:
-            reject("Nie znaleziono aktywnego gola do korekty.")
+            reject("No active goal found to correct.")
 
         team = state.team_by_id(target.team_id)
         if team is None:
-            reject("Nieprawidlowa druzyna w evencie gola.")
+            reject("Invalid team in the goal event.")
         if not player_on_team(team, command.new_scorer_id):
-            reject("Nowy strzelec nie nalezy do druzyny strzelajacej gola.")
+            reject("New scorer does not belong to the team that scored.")
 
         previous = target.scorer_id or ""
         if previous == command.new_scorer_id:
-            reject("Strzelec jest juz poprawnie przypisany.")
+            reject("Scorer is already correctly assigned.")
 
         return [
             GoalScorerCorrected(
@@ -437,10 +491,9 @@ class FootballRuleSet(
     def __init__(
         self,
         config: FootballMatchConfig,
-        reversal_chain=None,
+        reversal_chain: ReversalHandler | None = None,
     ) -> None:
         super().__init__(reversal_chain=reversal_chain)
-        self._config = config
 
 
 def _valid_minute(minute: int, state: FootballContestState) -> bool:
@@ -449,9 +502,7 @@ def _valid_minute(minute: int, state: FootballContestState) -> bool:
 
 def _withdrawn_event_ids(history: list[Event]) -> set[str]:
     withdrawn: set[str] = {
-        event.target_event_id
-        for event in history
-        if isinstance(event, EventReversed)
+        event.target_event_id for event in history if isinstance(event, EventReversed)
     }
     changed = True
     while changed:

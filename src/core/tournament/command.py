@@ -26,6 +26,12 @@ class RegisterContestant(TournamentCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
+class RegisterSquad(TournamentCommand):
+    contestant_id: str
+    player_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
 class CloseRegistration(TournamentCommand):
     pass
 
@@ -63,3 +69,18 @@ class RegisterContestantRef(TournamentCommand):
     """Carries full contestant reference for registration (application layer)."""
 
     contestant: Any
+
+
+@dataclass(frozen=True, kw_only=True)
+class IssueSuspension(TournamentCommand):
+    """Admin command: manually suspend a player for a number of matches."""
+
+    player_id: str
+    matches: int = 1
+
+
+@dataclass(frozen=True, kw_only=True)
+class LiftSuspension(TournamentCommand):
+    """Admin command: clear a player's remaining suspension."""
+
+    player_id: str

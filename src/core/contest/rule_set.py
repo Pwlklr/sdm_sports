@@ -31,9 +31,7 @@ class RuleSet(ABC):
     command_handlers: ClassVar[dict[type[Command], Handler]] = {}
     reaction_handlers: ClassVar[dict[type[Event], Handler]] = {}
 
-    def __init__(
-        self, reversal_chain: ReversalHandler | None = None
-    ) -> None:
+    def __init__(self, reversal_chain: ReversalHandler | None = None) -> None:
         self._reversal_chain = reversal_chain or default_reversal_chain()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:

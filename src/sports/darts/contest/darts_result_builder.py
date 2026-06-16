@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.core.contest.contest_result import ContestResult, RankedEntry
+from src.core.contestant.models import Contestant
 from src.core.contest.contest_state import ContestState
-from src.core.contest.event import OfficialOverrideEvent
+from src.core.contest.event import Event, OfficialOverrideEvent
 from src.core.contest.result_builder import ResultBuilder
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig
 from src.sports.darts.contest.darts_result import (
@@ -13,21 +14,25 @@ from src.sports.darts.contest.darts_result import (
     DartsSideMetrics,
 )
 from src.sports.darts.contest.darts_contest_state import DartsContestState
-from src.sports.darts.contest.events import ContestResultOverridden
+from src.sports.darts.contest.events import ContestResultOverridden, MatchConcluded
 
 
 @dataclass(frozen=True, kw_only=True)
 class DartsResultBuilder(ResultBuilder):
     config: DartsMatchConfig
 
-    def build(self, state: ContestState) -> ContestResult:
+    def build(self, state: ContestState, history: list[Event]) -> ContestResult:
         darts_state = _require_darts_state(state)
         if not darts_state.is_finished:
             raise ValueError("Match is not finished.")
-        return self._build_from_state(darts_state)
+        concluded = _find_match_concluded(history)
+        return self._build_from_state(darts_state, concluded)
 
     def build_official(
-        self, state: ContestState, override: OfficialOverrideEvent
+        self,
+        state: ContestState,
+        history: list[Event],
+        override: OfficialOverrideEvent,
     ) -> ContestResult:
         darts_state = _require_darts_state(state)
         if not darts_state.is_finished:
@@ -36,8 +41,11 @@ class DartsResultBuilder(ResultBuilder):
             raise TypeError("Expected ContestResultOverridden.")
         return self._build_official_from_state(darts_state, override)
 
-    def _build_from_state(self, state: DartsContestState) -> DartsResult:
-        side = self._build_side(state, decided_by=state.decided_by)
+    def _build_from_state(
+        self, state: DartsContestState, concluded: MatchConcluded | None
+    ) -> DartsResult:
+        decided_by = concluded.decided_by if concluded else "regulation"
+        side = self._build_side(state, decided_by=decided_by)
         ranking = self._build_ranking(state)
         return DartsResult(ranking_entries=ranking, side=side)
 
@@ -79,13 +87,20 @@ class DartsResultBuilder(ResultBuilder):
         return self._ranking_with_winner(state, winner)
 
     def _ranking_with_winner(
-        self, state: DartsContestState, winner
+        self, state: DartsContestState, winner: Contestant
     ) -> tuple[RankedEntry, ...]:
         entries = [RankedEntry(contestant=winner, place=1)]
         for player in state.players:
             if player.id != winner.id:
                 entries.append(RankedEntry(contestant=player, place=2))
         return tuple(entries)
+
+
+def _find_match_concluded(history: list[Event]) -> MatchConcluded | None:
+    for event in reversed(history):
+        if isinstance(event, MatchConcluded):
+            return event
+    return None
 
 
 def _require_darts_state(state: ContestState) -> DartsContestState:

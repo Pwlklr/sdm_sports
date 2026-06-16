@@ -12,16 +12,38 @@ from src.sports.football.contest.commands import (
 )
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.football_rule_set import FootballRuleSet
-from src.sports.football.contest.football_contest_state import FootballContestState, MatchPhase, create_football_contest_state
+from src.sports.football.contest.football_contest_state import (
+    FootballContestState,
+    MatchPhase,
+    create_football_contest_state,
+)
 
 
-def _process(state: FootballContestState, ruleset: FootballRuleSet, command) -> FootballContestState:
+def _process(
+    state: FootballContestState, ruleset: FootballRuleSet, command
+) -> FootballContestState:
     queue = list(ruleset.decide(command, state))
     while queue:
         fact = queue.pop(0)
         state = state.apply(fact)
         queue.extend(ruleset.react(fact, state))
     return state
+
+
+def _process_collecting(
+    state: FootballContestState, ruleset: FootballRuleSet, command
+) -> tuple[FootballContestState, list]:
+    """Process a command and return the updated state plus all emitted events."""
+    collected: list = []
+    queue = list(ruleset.decide(command, state))
+    while queue:
+        fact = queue.pop(0)
+        collected.append(fact)
+        state = state.apply(fact)
+        reactions = list(ruleset.react(fact, state))
+        queue.extend(reactions)
+        collected.extend(reactions)
+    return state, collected
 
 
 def _apply_facts(state: FootballContestState, facts) -> FootballContestState:
@@ -35,15 +57,25 @@ def match_setup() -> tuple[FootballContestState, FootballRuleSet, Team, Team]:
     home = Team("Home", "home")
     away = Team("Away", "away")
     home.add_player(IndividualPlayer("P9", "p9"))
-    config = FootballMatchConfig(number_of_halves=2, allow_draw=True)
+    config = FootballMatchConfig(
+        number_of_halves=2, allow_draw=True, players_on_pitch=1, min_players_on_pitch=1
+    )
     state = create_football_contest_state([home, away], config=config)
     ruleset = FootballRuleSet(config)
-    from src.sports.football.contest.events import MatchStarted, PeriodStarted
+    from src.sports.football.contest.events import (
+        LineupSubmitted,
+        MatchStarted,
+        PeriodStarted,
+    )
     from src.sports.football.contest.entities import PeriodKind
 
     state = _apply_facts(
         state,
-        [MatchStarted(), PeriodStarted(kind=PeriodKind.REGULAR, index=0)],
+        [
+            MatchStarted(),
+            PeriodStarted(kind=PeriodKind.REGULAR, index=0),
+            LineupSubmitted(team_id=home.id, starting=("p9",), bench=()),
+        ],
     )
     return state, ruleset, home, away
 
@@ -113,16 +145,21 @@ def test_draw_allowed_ends_match_after_regulation(
 def test_decisive_regulation_winner(
     match_setup: tuple[FootballContestState, FootballRuleSet, Team, Team],
 ) -> None:
+    from src.sports.football.contest.events import MatchConcluded
+
     state, ruleset, home, away = match_setup
     state = _apply_facts(
         state, ruleset.decide(ScoreGoal(team_index=0, minute=10), state)
     )
+    all_events: list = []
     for _ in range(2):
-        state = _process(state, ruleset, EndPeriod())
+        state, evts = _process_collecting(state, ruleset, EndPeriod())
+        all_events.extend(evts)
 
     assert state.is_finished is True
     assert state.winner == home
-    assert state.decided_by == "regulation"
+    concluded = next(e for e in all_events if isinstance(e, MatchConcluded))
+    assert concluded.decided_by == "regulation"
 
 
 def test_knockout_draw_goes_to_extra_time_then_penalties() -> None:
@@ -155,6 +192,8 @@ def test_knockout_draw_goes_to_extra_time_then_penalties() -> None:
 
 
 def test_penalty_shootout_resolves() -> None:
+    from src.sports.football.contest.events import MatchConcluded
+
     home = Team("Home", "home")
     away = Team("Away", "away")
     config = FootballMatchConfig(allow_draw=False, penalty_shootout_rounds=3)
@@ -162,16 +201,20 @@ def test_penalty_shootout_resolves() -> None:
     ruleset = FootballRuleSet(config)
     state = replace(state, phase=MatchPhase.PENALTIES)
 
+    all_events: list = []
     for scored_home, scored_away in [(True, True), (True, False), (True, False)]:
-        state = _process(
+        state, evts = _process_collecting(
             state, ruleset, TakePenaltyKick(team_index=0, scored=scored_home)
         )
+        all_events.extend(evts)
         if state.is_finished:
             break
-        state = _process(
+        state, evts = _process_collecting(
             state, ruleset, TakePenaltyKick(team_index=1, scored=scored_away)
         )
+        all_events.extend(evts)
 
     assert state.is_finished is True
     assert state.winner == home
-    assert state.decided_by == "penalties"
+    concluded = next(e for e in all_events if isinstance(e, MatchConcluded))
+    assert concluded.decided_by == "penalties"

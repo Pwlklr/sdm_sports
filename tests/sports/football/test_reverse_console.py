@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.core.contestant.models import IndividualPlayer, Team
-from src.core.sport.match_setup import create_console_contest
+from src.console.match_setup import create_console_contest
 from src.sports.football.adapter import FootballConsoleAdapter
 from src.sports.football.contest.commands import (
     RevokeCaution,
@@ -11,6 +11,7 @@ from src.sports.football.contest.commands import (
 )
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.descriptor import FOOTBALL_SPORT
+from tests.sports.football.lineup_helpers import submit_all_lineups
 
 
 def _match():
@@ -19,10 +20,12 @@ def _match():
     home.add_player(IndividualPlayer("P9", "p9"))
     away.add_player(IndividualPlayer("Other", "other"))
     adapter = FootballConsoleAdapter()
+    config = FootballMatchConfig(players_on_pitch=1, min_players_on_pitch=1)
     match = create_console_contest(
-        FOOTBALL_SPORT.id, adapter, [home, away], FootballMatchConfig()
+        FOOTBALL_SPORT.id, adapter, [home, away], config
     )
     match.handle(StartMatch())
+    submit_all_lineups(match)
     return match, adapter
 
 
@@ -62,9 +65,7 @@ def test_revoke_caution_command_from_reverse() -> None:
     from src.sports.football.contest.commands import CommitFoul
 
     match, adapter = _match()
-    match.handle(
-        CommitFoul(team_index=0, minute=5, card="yellow", offender_id="p9")
-    )
+    match.handle(CommitFoul(team_index=0, minute=5, card="yellow", offender_id="p9"))
 
     cmd = adapter.parse_command("reverse 1", match)
     assert isinstance(cmd, RevokeCaution)

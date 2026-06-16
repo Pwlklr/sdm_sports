@@ -32,15 +32,20 @@ class _State(StatefulContestState):
     def reset(self) -> _State:
         return _State(self.contestants)
 
+
 class MixinA:
-    def decide_a(self, command: CmdA, state: _State, history: list[Event]) -> list[Event]:
+    def decide_a(
+        self, command: CmdA, state: _State, history: list[Event]
+    ) -> list[Event]:
         return [FactA()]
 
     _own_command_handlers = {CmdA: decide_a}
 
 
 class MixinB:
-    def decide_b(self, command: CmdB, state: _State, history: list[Event]) -> list[Event]:
+    def decide_b(
+        self, command: CmdB, state: _State, history: list[Event]
+    ) -> list[Event]:
         return []
 
     _own_command_handlers = {CmdB: decide_b}

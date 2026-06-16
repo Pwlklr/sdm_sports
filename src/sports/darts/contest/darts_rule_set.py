@@ -3,8 +3,11 @@ from __future__ import annotations
 from typing import ClassVar
 
 from src.core.contest.command import Command
-from src.core.contest.event import Event
+from src.core.contest.contest_state import ContestState
+from src.core.contest.event import Event, OfficialOverrideEvent
+from src.core.contest.reversal_chain import ReversalHandler
 from src.core.contest.rule_set import Handler, RuleSet
+from src.core.contest.walkover_mixin import WalkoverMixin
 from src.core.shared.command_rejected import reject
 from src.sports.darts.contest.commands import (
     AwardWalkover,
@@ -36,22 +39,22 @@ class DartsCoreRules:
         self, command: StartMatch, state: DartsContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
-            reject("Mecz jest juz zakonczony.")
+            reject("Match is already finished.")
         if state.match_started:
-            reject("Mecz zostal juz rozpoczety.")
+            reject("Match has already started.")
         return [MatchStarted()]
 
     def decide_throw_dart(
         self, command: ThrowDart, state: DartsContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
-            reject("Mecz jest zakonczony - nie mozna rzucac.")
+            reject("Match is finished - cannot throw.")
 
         if state.current_turn is None:
-            reject("Brak aktywnej tury - rozpocznij mecz.")
+            reject("No active turn - start the match.")
 
         if len(state.current_turn.throws) >= state.config.darts_per_turn:
-            reject("Tura jest juz zakonczona (limit lotek osiagniety).")
+            reject("Turn is already finished (dart limit reached).")
 
         player_id = state.current_player.id
         pts_scored = _dart_points(command.sector, command.multiplier)
@@ -80,11 +83,11 @@ class DartsCoreRules:
         self, command: CallOcheFault, state: DartsContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
-            reject("Mecz jest zakonczony - nie mozna zglosic faulu.")
+            reject("Match is finished - cannot report a fault.")
         if state.current_turn is None:
-            reject("Brak aktywnej tury - rozpocznij mecz.")
+            reject("No active turn - start the match.")
         if len(state.current_turn.throws) >= state.config.darts_per_turn:
-            reject("Tura jest juz zakonczona (limit lotek osiagniety).")
+            reject("Turn is already finished (dart limit reached).")
 
         return [
             DartScored(
@@ -137,32 +140,25 @@ class DartsCoreRules:
     }
 
 
-class DartsAdminRules:
+class DartsAdminRules(WalkoverMixin):
     """Post-match administrative walkover / result override."""
 
-    def decide_award_walkover(
-        self, command: AwardWalkover, state: DartsContestState, history: list[Event]
+    def _walkover_conclusion(
+        self, winner_id: str, reason: str, **kwargs: object
     ) -> list[Event]:
-        if state.player_by_id(command.winner_id) is None:
-            reject("Nieprawidlowy zwyciezca.")
+        return [MatchConcluded(winner_id=winner_id, decided_by=reason)]
 
-        if state.match_started and not state.is_finished:
-            reject("Mecz trwa - walkover administracyjny niedostepny w trakcie gry.")
+    def _walkover_override(
+        self, winner_id: str, reason: str, **kwargs: object
+    ) -> list[OfficialOverrideEvent]:
+        return [ContestResultOverridden(winner_id=winner_id, reason=reason)]
 
-        if not state.is_finished:
-            return [
-                MatchConcluded(
-                    winner_id=command.winner_id,
-                    decided_by=command.reason,
-                )
-            ]
-
-        return [
-            ContestResultOverridden(
-                winner_id=command.winner_id,
-                reason=command.reason,
-            )
-        ]
+    def decide_award_walkover(
+        self, command: AwardWalkover, state: ContestState, history: list[Event]
+    ) -> list[Event]:
+        if state.player_by_id(command.winner_id) is None:  # type: ignore[attr-defined]
+            reject("Invalid winner.")
+        return self._resolve_walkover(command.winner_id, command.reason, state)
 
     _own_command_handlers: ClassVar[dict[type[Command], Handler]] = {
         AwardWalkover: decide_award_walkover,
@@ -170,9 +166,10 @@ class DartsAdminRules:
 
 
 class DartsRuleSet(DartsCoreRules, DartsAdminRules, RuleSet):
-    def __init__(self, config: DartsMatchConfig, reversal_chain=None) -> None:
+    def __init__(
+        self, config: DartsMatchConfig, reversal_chain: ReversalHandler | None = None
+    ) -> None:
         super().__init__(reversal_chain=reversal_chain)
-        self._config = config
 
 
 def _is_bust(

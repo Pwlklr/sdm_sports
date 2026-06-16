@@ -14,9 +14,7 @@ from src.core.tournament.ranking import head_to_head_points, single_first_place
 
 
 class DefaultPhaseOutcomeInterpreter(PhaseOutcomeInterpreter):
-    def interpret(
-        self, contest_id: str, result: ContestResult
-    ) -> MatchOutcomeSnapshot:
+    def interpret(self, contest_id: str, result: ContestResult) -> MatchOutcomeSnapshot:
         ranking = result.ranking()
         ranked = tuple(
             RankedPlaceSnapshot(contestant_id=e.contestant.id, place=e.place)

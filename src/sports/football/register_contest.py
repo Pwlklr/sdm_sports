@@ -8,7 +8,9 @@ from src.sports.football.contest.football_match_config import FootballMatchConfi
 from src.sports.football.contest.football_reversal import build_football_reversal_chain
 from src.sports.football.contest.football_result_builder import FootballResultBuilder
 from src.sports.football.contest.football_rule_set import FootballRuleSet
-from src.sports.football.contest.football_contest_state import create_football_contest_state
+from src.sports.football.contest.football_contest_state import (
+    create_football_contest_state,
+)
 from src.sports.football.descriptor import FOOTBALL_SPORT
 
 
@@ -33,11 +35,13 @@ def _build_football_contest(
     suspended = options.get("suspended_player_ids")
     if suspended is not None and not isinstance(suspended, frozenset):
         suspended = frozenset(suspended)
+    eligible_squads = options.get("eligible_squads")
 
     state = create_football_contest_state(
         contestants,
         config=config,
         suspended_player_ids=suspended,
+        eligible_squads=eligible_squads,
     )
     ruleset = FootballRuleSet(
         config,
@@ -47,4 +51,6 @@ def _build_football_contest(
     return ContestAssembly(state=state, ruleset=ruleset, result_builder=result_builder)
 
 
-ContestFactory.register(FOOTBALL_SPORT.id, _build_football_contest)
+ContestFactory.register(
+    FOOTBALL_SPORT.id, _build_football_contest, descriptor=FOOTBALL_SPORT
+)

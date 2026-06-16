@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import itertools
 
-from src.core.contestant import IndividualPlayer
 from src.core.tournament.fixture_scheduler import BracketScheduler, RoundRobinScheduler
 from src.core.tournament.scheduling_mode import SchedulingMode
 

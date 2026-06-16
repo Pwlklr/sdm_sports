@@ -36,4 +36,4 @@ def _build_darts_contest(
     return ContestAssembly(state=state, ruleset=ruleset, result_builder=result_builder)
 
 
-ContestFactory.register(DARTS_SPORT.id, _build_darts_contest)
+ContestFactory.register(DARTS_SPORT.id, _build_darts_contest, descriptor=DARTS_SPORT)

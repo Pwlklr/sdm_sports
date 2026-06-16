@@ -14,4 +14,5 @@ class MatchProvider(Protocol):
         match_config: Any,
         contest_id: str | None = None,
         suspended_player_ids: frozenset[str] | None = None,
+        eligible_squads: dict[str, frozenset[str]] | None = None,
     ) -> Contest: ...

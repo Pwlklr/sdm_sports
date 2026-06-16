@@ -35,6 +35,12 @@ class ContestantRegistered(TournamentProjectionEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SquadRegistered(TournamentProjectionEvent):
+    contestant_id: str
+    player_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
 class PhaseStarted(TournamentProjectionEvent):
     phase_id: str
     phase_name: str
@@ -81,6 +87,20 @@ class PhaseCompleted(TournamentProjectionEvent):
 class SuspensionIssued(TournamentProjectionEvent):
     player_id: str
     matches: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class SuspensionServed(TournamentProjectionEvent):
+    """One match of a suspension has been served (player was excluded from a fixture)."""
+
+    player_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SuspensionLifted(TournamentProjectionEvent):
+    """Administrative override: remaining suspension for a player is cleared."""
+
+    player_id: str
 
 
 @dataclass(frozen=True, kw_only=True)

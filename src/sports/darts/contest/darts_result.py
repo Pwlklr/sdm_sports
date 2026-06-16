@@ -42,13 +42,11 @@ class DartsResult(ContestResult):
     @property
     def sets_won(self) -> dict[str, int]:
         return {
-            cid: metrics.sets_won
-            for cid, metrics in self.side.by_contestant_id.items()
+            cid: metrics.sets_won for cid, metrics in self.side.by_contestant_id.items()
         }
 
     @property
     def legs_won(self) -> dict[str, int]:
         return {
-            cid: metrics.legs_won
-            for cid, metrics in self.side.by_contestant_id.items()
+            cid: metrics.legs_won for cid, metrics in self.side.by_contestant_id.items()
         }

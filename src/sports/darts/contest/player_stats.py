@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.core.contest.contestant_stats import ContestantStats
+
 
 @dataclass(frozen=True, kw_only=True)
-class DartsPlayerStats:
+class DartsPlayerStats(ContestantStats):
     contestant_id: str
     sets_won: int = 0
     legs_won: int = 0

@@ -6,7 +6,9 @@ from src.core.contestant import IndividualPlayer, Team
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.entities import PeriodKind
 from src.sports.football.contest.events import MatchStarted, PeriodStarted
-from src.sports.football.contest.football_contest_state import create_football_contest_state
+from src.sports.football.contest.football_contest_state import (
+    create_football_contest_state,
+)
 
 
 def _state():

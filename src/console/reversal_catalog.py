@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from src.core.contest.event import Event
@@ -14,7 +14,7 @@ class ReversalOption:
 
 
 def build_numbered_catalog(
-    events: list[Event],
+    events: Sequence[Event],
     label_for: Callable[[Event], str],
 ) -> list[ReversalOption]:
     return [
@@ -23,19 +23,21 @@ def build_numbered_catalog(
     ]
 
 
-def print_reversal_menu(
+def format_reversal_menu(
     catalog: list[ReversalOption],
     *,
     title: str,
     usage: str,
-) -> None:
-    print(f"\n--- {title} ---")
+    empty_label: str,
+) -> list[str]:
+    """Render a reversal menu as plain lines, leaving I/O to the caller."""
+    lines = [f"\n--- {title} ---"]
     if not catalog:
-        print("  (brak zdarzen do wycofania)")
+        lines.append(f"  {empty_label}")
     else:
-        for option in catalog:
-            print(f"  {option.number}. {option.label}")
-    print(f"  ({usage})")
+        lines.extend(f"  {option.number}. {option.label}" for option in catalog)
+    lines.append(f"  ({usage})")
+    return lines
 
 
 def parse_reversal_choice(parts: list[str]) -> int | None:

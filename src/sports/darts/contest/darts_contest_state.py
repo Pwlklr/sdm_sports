@@ -35,7 +35,6 @@ class DartsContestState(ContestState):
     match_started: bool = False
     is_finished: bool = False
     winner_id: Optional[str] = None
-    decided_by: str = "regulation"
 
     _appliers: ClassVar[
         dict[type[Event], Callable[["DartsContestState", Event], DartsContestState]]
@@ -181,7 +180,6 @@ def _apply_match_concluded(state: DartsContestState, fact: Event) -> DartsContes
         state,
         winner_id=fact.winner_id,
         is_finished=True,
-        decided_by=fact.decided_by,
     )
 
 
@@ -197,22 +195,25 @@ DartsContestState._appliers = {
 }
 
 
+def _require_individual_player(player: Contestant) -> IndividualPlayer:
+    if not isinstance(player, IndividualPlayer):
+        raise ValueError("Darts matches require IndividualPlayer contestants.")
+    return player
+
+
 def create_darts_contest_state(
     players: list[Contestant],
     config: DartsMatchConfig,
 ) -> DartsContestState:
     if not players:
         raise ValueError("A match requires at least one contestant.")
-    for player in players:
-        if not isinstance(player, IndividualPlayer):
-            raise ValueError("Darts matches require IndividualPlayer contestants.")
-    typed = tuple(players)
+    typed: tuple[IndividualPlayer, ...] = tuple(
+        _require_individual_player(player) for player in players
+    )
     return DartsContestState(
         players=typed,
         config=config,
         scores={p.id: config.starting_score for p in typed},
-        contestant_stats={
-            p.id: DartsPlayerStats(contestant_id=p.id) for p in typed
-        },
+        contestant_stats={p.id: DartsPlayerStats(contestant_id=p.id) for p in typed},
         turn_starting_score=config.starting_score,
     )

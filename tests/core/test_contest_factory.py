@@ -43,24 +43,27 @@ class MockRuleSet(RuleSet):
     reaction_handlers = {}
 
 
+_MOCK_SPORT_ID = "_test_mock_sport"
+
+
 def _register_mock_builder() -> None:
-    def build(
-        contestants: list, _config: object, **_: object
-    ) -> ContestAssembly:
+    def build(contestants: list, _config: object, **_: object) -> ContestAssembly:
         return ContestAssembly(
             state=MockState(contestants),
             ruleset=MockRuleSet(),
             result_builder=StubResultBuilder(),
         )
 
-    if "mock" not in ContestFactory._builders:
-        ContestFactory.register("mock", build)
+    try:
+        ContestFactory.register(_MOCK_SPORT_ID, build)
+    except ValueError:
+        pass  # already registered in a previous test run
 
 
 def test_contest_factory_creates_contest_for_registered_sport() -> None:
     _register_mock_builder()
     p1 = IndividualPlayer("Player 1")
-    contest = ContestFactory.create("mock", [p1], object())
+    contest = ContestFactory.create(_MOCK_SPORT_ID, [p1], object())
 
     assert isinstance(contest.current_state, MockState)
     assert contest.contestants == [p1]

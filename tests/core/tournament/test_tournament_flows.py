@@ -15,9 +15,7 @@ from tests.core.contest_test_support import (
     make_contest,
 )
 from src.core.tournament import (
-    CloseRegistration,
     FixtureScheduled,
-    OpenRegistration,
     RecordMatchOutcome,
     Tournament,
 )
@@ -109,7 +107,7 @@ def test_f2_record_match_outcome_updates_standings() -> None:
     tournament.close_registration()
     contest_id = tournament.pending_match_ids()[0]
     match = make_contest(DummyState([p1, p2]), DummyRuleSet(), contest_id=contest_id)
-    tournament._match_registry[contest_id] = match
+    tournament.register_match(match)
     match.handle(EndCommand())
     tournament.handle(
         RecordMatchOutcome(
@@ -156,7 +154,7 @@ def test_f10_idempotent_record_match_outcome() -> None:
     tournament.close_registration()
     contest_id = tournament.pending_match_ids()[0]
     match = make_contest(DummyState([p1, p2]), DummyRuleSet(), contest_id=contest_id)
-    tournament._match_registry[contest_id] = match
+    tournament.register_match(match)
     match.handle(EndCommand())
     result = DummyResult(p1, p2)
     tournament.handle(RecordMatchOutcome(contest_id=contest_id, result=result))
@@ -166,15 +164,18 @@ def test_f10_idempotent_record_match_outcome() -> None:
 
 
 def test_tournament_from_events_replay() -> None:
+    from src.core.tournament.blueprint_factory import TournamentBlueprintFactory
+
     tournament = _make_tournament("league")
     tournament.open_registration()
     p1 = IndividualPlayer("P1", "p1")
     tournament.register_contestant(p1)
     events = tournament.history
+    blueprint = TournamentBlueprintFactory.get("league")
     replayed = Tournament.from_events(
         "Test Cup",
         DARTS_SPORT.id,
-        tournament._blueprint,
+        blueprint,
         events,
         tournament_id=tournament.id,
     )
@@ -204,10 +205,14 @@ def test_correct_match_outcome_upserts() -> None:
     tournament.close_registration()
     contest_id = tournament.pending_match_ids()[0]
     match = make_contest(DummyState([p1, p2]), DummyRuleSet(), contest_id=contest_id)
-    tournament._match_registry[contest_id] = match
+    tournament.register_match(match)
     match.handle(EndCommand())
-    tournament.handle(RecordMatchOutcome(contest_id=contest_id, result=DummyResult(p1, p2)))
+    tournament.handle(
+        RecordMatchOutcome(contest_id=contest_id, result=DummyResult(p1, p2))
+    )
     tournament.handle(
         CorrectMatchOutcome(contest_id=contest_id, result=DummyResult(p2, p1))
     )
-    assert tournament.state.phase_states["group"].outcomes[contest_id].winner_id == p2.id
+    assert (
+        tournament.state.phase_states["group"].outcomes[contest_id].winner_id == p2.id
+    )

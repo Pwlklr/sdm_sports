@@ -35,3 +35,7 @@ class ConsoleAdapter(ABC):
     @abstractmethod
     def parse_command(self, user_input: str, contest: Contest) -> Optional[Command]:
         pass
+
+    def format_archived_match_lines(self, match_id: str, match: Contest) -> list[str]:
+        """Return display lines for an archived match, or empty if not this sport."""
+        return []

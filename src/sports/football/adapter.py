@@ -2,9 +2,9 @@ from typing import Optional
 
 from src.core.contest import Contest
 from src.core.contest.command import Command, ReverseDecision
-from src.core.console.reversal_catalog import (
+from src.console.reversal_catalog import (
+    format_reversal_menu,
     parse_reversal_choice,
-    print_reversal_menu,
     resolve_catalog_choice,
 )
 from src.core.contestant.models import Team
@@ -19,8 +19,11 @@ from src.sports.football.console.reversal_catalog import (
 )
 from src.sports.football.contest.commands import StartMatch
 from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.contest.roster import format_team_header
-from src.sports.football.contest.football_contest_state import FootballContestState, MatchPhase
+from src.sports.football.console.roster_view import format_team_header
+from src.sports.football.contest.football_contest_state import (
+    FootballContestState,
+    MatchPhase,
+)
 from src.sports.football.descriptor import FOOTBALL_SPORT
 
 
@@ -50,7 +53,10 @@ class FootballConsoleAdapter(ConsoleAdapter):
         )
 
     def attach_view(self, contest: Contest) -> None:
+        contest.detach_instances_of(FootballConsoleView)
         contest.attach(FootballConsoleView())
+        if contest.current_state.match_started:
+            contest.notify(None)
 
     def get_input_prompt(self, contest: Contest) -> str:
         state = contest.current_state
@@ -104,9 +110,7 @@ class FootballConsoleAdapter(ConsoleAdapter):
         goals_only: bool,
         verb: str,
     ) -> Optional[ReverseDecision]:
-        catalog = build_football_reversal_catalog(
-            contest, state, goals_only=goals_only
-        )
+        catalog = build_football_reversal_catalog(contest, state, goals_only=goals_only)
         parts = cleaned.split()
 
         if len(parts) == 1:
@@ -115,7 +119,13 @@ class FootballConsoleAdapter(ConsoleAdapter):
                 if goals_only
                 else "Zdarzenia do wycofania"
             )
-            print_reversal_menu(catalog, title=title, usage=f"{verb} <numer>")
+            for line in format_reversal_menu(
+                catalog,
+                title=title,
+                usage=f"{verb} <numer>",
+                empty_label="(brak zdarzen do wycofania)",
+            ):
+                print(line)
             return None
 
         choice = parse_reversal_choice(parts)
@@ -134,3 +144,13 @@ class FootballConsoleAdapter(ConsoleAdapter):
 
     def get_start_command(self) -> Optional[Command]:
         return StartMatch()
+
+    def format_archived_match_lines(self, match_id: str, contest: Contest) -> list[str]:
+        state = contest.current_state
+        if not isinstance(state, FootballContestState):
+            return []
+        from src.sports.football.console.archive_view import (
+            format_football_archived_match_lines,
+        )
+
+        return format_football_archived_match_lines(match_id, contest, state)

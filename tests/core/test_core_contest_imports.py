@@ -12,7 +12,9 @@ def test_core_contest_does_not_import_sports() -> None:
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
                 if node.module.startswith("src.sports"):
-                    offenders.append(f"{path.relative_to(contest_dir.parent.parent)}: {node.module}")
+                    offenders.append(
+                        f"{path.relative_to(contest_dir.parent.parent)}: {node.module}"
+                    )
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name.startswith("src.sports"):

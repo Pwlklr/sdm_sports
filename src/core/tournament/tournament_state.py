@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Any, Protocol
+from typing import Protocol
 
 from typing_extensions import Self
 
 from src.core.tournament.event import TournamentProjectionEvent
 from src.core.tournament.phase import Phase, PhaseStatus
 from src.core.tournament.phase_format import PhaseFormat
-from src.core.tournament.phase_state import BracketPhaseState, PhaseState, RoundRobinPhaseState
-from src.core.tournament.scheduling_mode import SchedulingMode
+from src.core.tournament.phase_state import (
+    BracketPhaseState,
+    PhaseState,
+    RoundRobinPhaseState,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -18,7 +21,11 @@ class DisciplineState:
     suspensions: dict[str, int] = field(default_factory=dict)
 
     def apply(self, fact: TournamentProjectionEvent) -> DisciplineState:
-        from src.core.tournament.event import SuspensionIssued
+        from src.core.tournament.event import (
+            SuspensionIssued,
+            SuspensionLifted,
+            SuspensionServed,
+        )
 
         if isinstance(fact, SuspensionIssued):
             suspensions = dict(self.suspensions)
@@ -26,6 +33,26 @@ class DisciplineState:
                 suspensions.get(fact.player_id, 0), fact.matches
             )
             return replace(self, suspensions=suspensions)
+
+        if isinstance(fact, SuspensionServed):
+            current = self.suspensions.get(fact.player_id, 0)
+            if current <= 0:
+                return self
+            suspensions = dict(self.suspensions)
+            remaining = current - 1
+            if remaining == 0:
+                del suspensions[fact.player_id]
+            else:
+                suspensions[fact.player_id] = remaining
+            return replace(self, suspensions=suspensions)
+
+        if isinstance(fact, SuspensionLifted):
+            if fact.player_id not in self.suspensions:
+                return self
+            suspensions = dict(self.suspensions)
+            del suspensions[fact.player_id]
+            return replace(self, suspensions=suspensions)
+
         return self
 
     def suspended_ids(self) -> frozenset[str]:
@@ -41,6 +68,9 @@ class TournamentState(Protocol):
 
     @property
     def contestants(self) -> dict[str, str]: ...
+
+    @property
+    def squads(self) -> dict[str, tuple[str, ...]]: ...
 
     @property
     def phases(self) -> tuple[Phase, ...]: ...
@@ -68,6 +98,7 @@ class DefaultTournamentState:
     blueprint_id: str
     registration_open: bool = False
     contestants: dict[str, str] = field(default_factory=dict)
+    squads: dict[str, tuple[str, ...]] = field(default_factory=dict)
     phases: tuple[Phase, ...] = ()
     active_phase_id: str | None = None
     phase_states: dict[str, PhaseState] = field(default_factory=dict)
@@ -86,6 +117,7 @@ class DefaultTournamentState:
             PhaseStarted,
             RegistrationClosed,
             RegistrationOpened,
+            SquadRegistered,
             TournamentCompleted,
         )
 
@@ -99,6 +131,11 @@ class DefaultTournamentState:
             contestants = dict(self.contestants)
             contestants[fact.contestant_id] = fact.contestant_name
             return replace(self, contestants=contestants)
+
+        if isinstance(fact, SquadRegistered):
+            squads = dict(self.squads)
+            squads[fact.contestant_id] = fact.player_ids
+            return replace(self, squads=squads)
 
         if isinstance(fact, PhaseStarted):
             phases = list(self.phases)
@@ -153,9 +190,7 @@ class DefaultTournamentState:
             )
 
         if isinstance(fact, TournamentCompleted):
-            return replace(
-                self, is_complete=True, champion_id=fact.champion_id
-            )
+            return replace(self, is_complete=True, champion_id=fact.champion_id)
 
         discipline = self.discipline.apply(fact)
         if discipline is not self.discipline:

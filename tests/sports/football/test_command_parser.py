@@ -12,7 +12,11 @@ from src.sports.football.contest.commands import (
     TakePenaltyKick,
 )
 from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.contest.football_contest_state import FootballContestState, MatchPhase, create_football_contest_state
+from src.sports.football.contest.football_contest_state import (
+    FootballContestState,
+    MatchPhase,
+    create_football_contest_state,
+)
 from src.sports.football.contest.events import MatchStarted, PeriodStarted
 from src.sports.football.contest.entities import PeriodKind
 
@@ -65,7 +69,7 @@ def test_parse_foul_without_card() -> None:
 
 
 def test_parse_roster_query(capsys: pytest.CaptureFixture[str]) -> None:
-    from src.sports.football.contest.roster_status import print_roster_report
+    from src.sports.football.console.roster_view import print_roster_report
 
     state = _state()
     print_roster_report(state, team_number=1)

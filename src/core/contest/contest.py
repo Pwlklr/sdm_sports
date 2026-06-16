@@ -10,10 +10,16 @@ from typing import TYPE_CHECKING, List
 
 from src.core.contest.command import Command, ReverseDecision
 from src.core.contest.contest_result import ContestResult
+from src.core.contest.contest_session import ContestSessionStatus
 from src.core.contest.contest_state import ContestState
 from src.core.contest.result_builder import ResultBuilder
 from src.core.contest.rule_set import RuleSet
-from src.core.contest.event import Event, EventReversed, OfficialOverrideEvent, ProjectionEvent
+from src.core.contest.event import (
+    Event,
+    EventReversed,
+    OfficialOverrideEvent,
+    ProjectionEvent,
+)
 from src.core.contest.observer import Subject
 
 if TYPE_CHECKING:
@@ -36,6 +42,33 @@ class Contest(Subject):
         self._ruleset = ruleset
         self._result_builder = result_builder
         self._history: list[Event] = []
+        self._suspended = False
+
+    @property
+    def is_suspended(self) -> bool:
+        return self._suspended
+
+    @property
+    def session_status(self) -> ContestSessionStatus:
+        if self.current_state.is_finished:
+            return ContestSessionStatus.FINISHED
+        if self._suspended:
+            return ContestSessionStatus.SUSPENDED
+        if self.current_state.match_started:
+            return ContestSessionStatus.IN_PROGRESS
+        return ContestSessionStatus.NOT_STARTED
+
+    def suspend(self) -> None:
+        if self.current_state.is_finished:
+            raise ValueError("Cannot suspend a finished contest.")
+        if not self.current_state.match_started:
+            raise ValueError("Cannot suspend a contest that has not started.")
+        self._suspended = True
+
+    def resume(self) -> None:
+        if not self._suspended:
+            raise ValueError("Contest is not suspended.")
+        self._suspended = False
 
     @property
     def contestants(self) -> List[Contestant]:
@@ -67,17 +100,27 @@ class Contest(Subject):
     def get_played_result(self) -> ContestResult:
         if not self.current_state.is_finished:
             raise ValueError("Match is not completed.")
-        return self._result_builder.build(self.current_state)
+        return self._result_builder.build(self.current_state, self._history)
 
     def get_official_result(self) -> ContestResult:
         if not self.current_state.is_finished:
             raise ValueError("Match is not completed.")
         walkovers = self._effective_walkover_events()
         if not walkovers:
-            return self._result_builder.build(self.current_state)
+            return self._result_builder.build(self.current_state, self._history)
         return self._result_builder.build_official(
-            self.current_state, walkovers[-1]
+            self.current_state, self._history, walkovers[-1]
         )
+
+    def has_official_override(self) -> bool:
+        """True when an active administrative override sits on the log."""
+        return bool(self._effective_walkover_events())
+
+    def official_override_reason(self) -> str | None:
+        walkovers = self._effective_walkover_events()
+        if not walkovers:
+            return None
+        return getattr(walkovers[-1], "reason", None)
 
     def handle(self, command: Command) -> list[Event]:
         if isinstance(command, ReverseDecision):
@@ -100,14 +143,16 @@ class Contest(Subject):
 
         return emitted
 
-    def _handle_reversal(self, command: ReverseDecision) -> list[EventReversed]:
+    def _handle_reversal(self, command: ReverseDecision) -> list[Event]:
         markers = self._ruleset.decide_reversal(
             command, self.current_state, self._history
         )
+        emitted: list[Event] = []
         for marker in markers:
             self._record_meta_event(marker)
+            emitted.append(marker)
         self._rebuild_state()
-        return markers
+        return emitted
 
     def _record_event(self, fact: Event) -> None:
         if isinstance(fact, OfficialOverrideEvent):
@@ -162,7 +207,7 @@ class Contest(Subject):
             if isinstance(event, ProjectionEvent)
         ]
 
-    def _effective_walkover_events(self) -> list[Event]:
+    def _effective_walkover_events(self) -> list[OfficialOverrideEvent]:
         return [
             event
             for event in self._effective_events()

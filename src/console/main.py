@@ -1,27 +1,32 @@
 import sys
-from dataclasses import replace
 from typing import List
 
-from src.core.contest import Contest
-from src.core.shared.command_rejected import CommandRejected
+from src.console.archive_view import (
+    archived_matches_view,
+    archived_tournaments_view,
+)
+from src.console.match_setup import create_console_contest
 from src.console.tournament_view import (
     active_matches,
+    match_session_tag,
     schedule_view,
     standings_table,
 )
+from src.core.contest import Contest
+from src.core.contest.contest_session import ContestSessionStatus
+from src.core.contestant.models import Contestant, IndividualPlayer, Team
+from src.core.shared.command_rejected import CommandRejected
 from src.core.sport.console_adapter import ConsoleAdapter
-from src.core.sport.match_setup import create_console_contest
 from src.core.sport.registered_sport import RegisteredSport
-from src.core.contestant import Contestant, IndividualPlayer, Team
 from src.core.system.sports_system_engine import SportsSystemEngine
 from src.core.tournament import Tournament
-from src.core.tournament.event import FixtureScheduled
+from src.core.tournament.tournament_entry import TournamentEntry
+from src.sports.darts.contest.darts_contest_state import DartsContestState
 from src.sports.darts.descriptor import DARTS_SPORT
 from src.sports.darts.plugin import DARTS_PLUGIN
-from src.sports.darts.contest.darts_contest_state import DartsContestState
+from src.sports.football.contest.football_contest_state import FootballContestState
 from src.sports.football.descriptor import FOOTBALL_SPORT
 from src.sports.football.plugin import FOOTBALL_PLUGIN
-from src.sports.football.contest.football_contest_state import FootballContestState
 
 
 def print_menu() -> None:
@@ -48,7 +53,7 @@ def sport_id_for_match(match: Contest) -> str:
 def select_sport(engine: SportsSystemEngine) -> RegisteredSport:
     sports = engine.get_available_sports()
     if not sports:
-        print("❌ No sports registered.")
+        print("No sports registered.")
         sys.exit(1)
 
     print("\nSelect Discipline:")
@@ -59,7 +64,7 @@ def select_sport(engine: SportsSystemEngine) -> RegisteredSport:
         choice = int(input("Choice: ").strip()) - 1
         return sports[choice]
     except (ValueError, IndexError):
-        print("⚠️ Invalid choice, defaulting to first sport.")
+        print("Invalid choice, defaulting to first sport.")
         return sports[0]
 
 
@@ -68,7 +73,7 @@ def match_loop(
 ) -> None:
     match = engine.get_match(match_id)
     if not match:
-        print("❌ Match not found in active memory!")
+        print("Match not found in active memory!")
         return
 
     while not match.current_state.is_finished:
@@ -76,7 +81,12 @@ def match_loop(
         cmd_input = input(f">> {prompt_text}: ").strip().lower()
 
         if cmd_input == "suspend":
-            print("\n⏸️ Match Suspended. State safely cached.")
+            try:
+                engine.suspend_match(match_id)
+            except ValueError as e:
+                print(f"System Error: {e}")
+                continue
+            print("\nMatch Suspended. State safely cached.")
             break
 
         command = adapter.parse_command(cmd_input, match)
@@ -84,12 +94,12 @@ def match_loop(
             try:
                 engine.dispatch_match_command(match_id, command)
             except CommandRejected as e:
-                print(f"⛔ Odrzucono: {e.reason}")
+                print(f"Rejected: {e.reason}")
             except ValueError as e:
-                print(f"⚠️ System Error: {e}")
+                print(f"System Error: {e}")
 
     if match.current_state.is_finished:
-        print("\n🎉 Match Complete!")
+        print("\nMatch Complete!")
 
 
 def setup_demo_roster(engine: SportsSystemEngine) -> None:
@@ -192,9 +202,7 @@ def select_players(
 ) -> List[IndividualPlayer]:
     players = engine.list_individual_players()
     if len(players) < min_players:
-        print(
-            f"❌ Insufficient players. Register at least {min_players} players first."
-        )
+        print(f"Insufficient players. Register at least {min_players} players first.")
         return []
 
     try:
@@ -204,7 +212,7 @@ def select_players(
             ).strip()
         )
         if num_players < min_players or num_players > len(players):
-            print("❌ Invalid number of players.")
+            print("Invalid number of players.")
             return []
 
         selected_players: List[IndividualPlayer] = []
@@ -220,19 +228,19 @@ def select_players(
                 input(f"Select Player {len(selected_players) + 1} Index: ").strip()
             )
             if p_idx < 0 or p_idx >= len(players):
-                print("❌ Invalid selection. Try again.")
+                print("Invalid selection. Try again.")
                 continue
 
             selected_player = players[p_idx]
             if selected_player in selected_players:
-                print("❌ Player already selected! Choose a different unique player.")
+                print("Player already selected! Choose a different unique player.")
                 continue
 
             selected_players.append(selected_player)
 
         return selected_players
     except (ValueError, IndexError):
-        print("❌ Invalid input.")
+        print("Invalid input.")
         return []
 
 
@@ -240,7 +248,7 @@ def select_teams(engine: SportsSystemEngine, team_count: int = 2) -> List[Team]:
     teams = engine.list_teams()
     if len(teams) < team_count:
         print(
-            f"❌ Need at least {team_count} registered teams "
+            f"Need at least {team_count} registered teams "
             f"(only {len(teams)} available)."
         )
         return []
@@ -255,26 +263,133 @@ def select_teams(engine: SportsSystemEngine, team_count: int = 2) -> List[Team]:
                 ", ".join(f"{n}. {p.name}" for n, p in enumerate(team.roster, start=1))
                 or "(empty squad)"
             )
-            print(f"[{idx}] {team.name} — {roster}")
+            print(f"[{idx}] {team.name} - {roster}")
 
         try:
             t_idx = int(input("Team index: ").strip())
         except ValueError:
-            print("❌ Invalid input.")
+            print("Invalid input.")
             return []
 
         if t_idx < 0 or t_idx >= len(teams):
-            print("❌ Invalid selection. Try again.")
+            print("Invalid selection. Try again.")
             continue
 
         team = teams[t_idx]
         if team in selected_teams:
-            print("❌ Team already selected.")
+            print("Team already selected.")
             continue
 
         selected_teams.append(team)
 
     return selected_teams
+
+
+def select_squad_from_team(
+    team: Team, *, min_players: int = 14, max_players: int = 23
+) -> tuple[str, ...]:
+    if len(team.roster) < min_players:
+        print(
+            f"{team.name} has only {len(team.roster)} players; "
+            f"need at least {min_players} for a tournament squad."
+        )
+        return ()
+
+    print(f"\n--- Tournament squad for {team.name} ---")
+    for number, player in enumerate(team.roster, start=1):
+        print(f"  {number}. {player.name}")
+
+    while True:
+        raw = input(
+            f"Enter squad player numbers (comma-separated, "
+            f"min {min_players}, max {max_players}): "
+        ).strip()
+        try:
+            numbers = [int(part.strip()) for part in raw.split(",") if part.strip()]
+        except ValueError:
+            print("Invalid input.")
+            continue
+        if len(numbers) < min_players or len(numbers) > max_players:
+            print(f"Squad must contain between {min_players} and {max_players} players.")
+            continue
+        if len(set(numbers)) != len(numbers):
+            print("Duplicate player numbers are not allowed.")
+            continue
+
+        player_ids: list[str] = []
+        invalid = False
+        for number in numbers:
+            if number < 1 or number > len(team.roster):
+                print(f"Invalid player number: {number}.")
+                invalid = True
+                break
+            player_ids.append(team.roster[number - 1].id)
+        if invalid:
+            continue
+        return tuple(player_ids)
+
+
+def select_tournament_entries(
+    engine: SportsSystemEngine, sport: RegisteredSport
+) -> List[TournamentEntry]:
+    if sport.descriptor.id == FOOTBALL_SPORT.id:
+        teams = select_teams(engine, team_count=3)
+        if len(teams) < 3:
+            return []
+        entries: List[TournamentEntry] = []
+        for team in teams:
+            if not isinstance(team, Team):
+                continue
+            player_ids = select_squad_from_team(team)
+            if not player_ids:
+                return []
+            entries.append(TournamentEntry(contestant=team, player_ids=player_ids))
+        return entries
+
+    players = select_players(engine, min_players=3)
+    return [
+        TournamentEntry(contestant=player, player_ids=(player.id,))
+        for player in players
+    ]
+
+
+def ensure_football_lineups(
+    engine: SportsSystemEngine, match_id: str, adapter: ConsoleAdapter
+) -> bool:
+    match = engine.get_match(match_id)
+    if match is None:
+        return False
+    state = match.current_state
+    if not isinstance(state, FootballContestState) or not state.eligible_player_ids:
+        return True
+
+    while not state.match_started:
+        missing = [team for team in state.teams if state.lineup_for(team.id) is None]
+        if not missing:
+            return True
+        team = missing[0]
+        print(
+            f"\nSubmit match squad for {team.name} "
+            f"(use: lineup <team#> <player#...>)."
+        )
+        adapter.attach_view(match)
+        cmd_input = input(f">> {adapter.get_input_prompt(match)}: ").strip().lower()
+        if cmd_input in {"quit", "exit", "q"}:
+            return False
+        command = adapter.parse_command(cmd_input, match)
+        if command is None:
+            continue
+        try:
+            engine.dispatch_match_command(match_id, command)
+        except CommandRejected as error:
+            print(f"Rejected: {error.reason}")
+        match = engine.get_match(match_id)
+        if match is None:
+            return False
+        state = match.current_state
+        if not isinstance(state, FootballContestState):
+            return False
+    return True
 
 
 def select_contestants(
@@ -296,36 +411,55 @@ def play_tournament_match(
     adapter: ConsoleAdapter,
 ) -> None:
     sides = " vs ".join(c.name for c in match.contestants)
-    print("\n==============================================")
-    print(f" 🎯 TOURNAMENT MATCH: {sides}")
-    print("==============================================")
-    input("Press Enter to begin match...")
+    status = match.session_status
+    is_resume = status in (
+        ContestSessionStatus.SUSPENDED,
+        ContestSessionStatus.IN_PROGRESS,
+    )
 
-    _apply_suspension_context(tournament, match)
+    print("\n==============================================")
+    if status is ContestSessionStatus.SUSPENDED:
+        print(f" TOURNAMENT MATCH (RESUME): {sides}")
+    elif is_resume:
+        print(f" TOURNAMENT MATCH (CONTINUE): {sides}")
+    else:
+        print(f" TOURNAMENT MATCH: {sides}")
+    print("==============================================")
+
+    if is_resume:
+        input("Press Enter to continue match...")
+        if match.is_suspended:
+            match.resume()
+    else:
+        input("Press Enter to begin match...")
+
+    engine.sync_match_discipline(tournament, match)
 
     engine.register_active_match(match)
     adapter.attach_view(match)
-    start_cmd = adapter.get_start_command()
-    if start_cmd:
-        engine.dispatch_match_command(match.id, start_cmd)
+
+    if not match.current_state.match_started:
+        if not ensure_football_lineups(engine, match.id, adapter):
+            return
+        start_cmd = adapter.get_start_command()
+        if start_cmd:
+            try:
+                engine.dispatch_match_command(match.id, start_cmd)
+            except CommandRejected as e:
+                print(f"Rejected: {e.reason}")
+                return
 
     match_loop(engine, match.id, adapter)
 
+    if match.session_status is ContestSessionStatus.SUSPENDED:
+        print("\nMatch suspended. Select it again from the tournament menu to resume.")
+        return
+
     if not match.current_state.is_finished:
-        print("\n⏸️ Match suspended. You can resume it later from this menu.")
         return
 
     engine.complete_tournament_match(tournament, match.id)
     engine.archive_match(match.id)
-
-
-def _apply_suspension_context(tournament: Tournament, match: Contest) -> None:
-    """Feed current tournament suspensions into a football match before it starts."""
-    state = match.current_state
-    if isinstance(state, FootballContestState):
-        match.current_state = state.with_tournament_context(
-            suspended_player_ids=tournament.state.discipline.suspended_ids()
-        )
 
 
 def run_tournament_matches(
@@ -336,7 +470,7 @@ def run_tournament_matches(
     while not tournament.is_completed:
         phase_id = tournament.active_phase_id()
         if phase_id is None and not tournament.is_completed:
-            print("❌ Tournament has no active phase.")
+            print("Tournament has no active phase.")
             return
 
         phase_name = phase_id or "?"
@@ -346,36 +480,36 @@ def run_tournament_matches(
                 break
 
         playable = active_matches(tournament)
-        print(f"\n=== Turniej '{tournament.name}' | Faza: {phase_name} ===")
-        print("1. Rozegraj mecz")
-        print("2. Tabela wynikow")
-        print("3. Harmonogram i wyniki")
-        print("4. Powrot do menu glownego")
-        action = input("Wybor: ").strip()
+        print(f"\n=== Tournament '{tournament.name}' | Phase: {phase_name} ===")
+        print("1. Play match")
+        print("2. Standings")
+        print("3. Schedule and results")
+        print("4. Back to main menu")
+        action = input("Choice: ").strip()
 
         if action == "1":
             if not playable:
-                print("✅ Wszystkie mecze tej fazy rozegrane.")
+                print("All matches in this phase have been played.")
                 continue
-            print("\nMecze do rozegrania:")
+            print("\nMatches to play:")
             for i, match in enumerate(playable):
                 sides = " vs ".join(c.name for c in match.contestants)
-                print(f"[{i}] {sides}")
+                print(f"[{i}] {sides}{match_session_tag(match)}")
             try:
-                pick = int(input("Wybierz mecz: ").strip())
+                pick = int(input("Select match: ").strip())
                 chosen = playable[pick]
             except (ValueError, IndexError):
-                print("❌ Nieprawidlowy wybor.")
+                print("Invalid choice.")
                 continue
             play_tournament_match(engine, tournament, chosen, adapter)
 
         elif action == "2":
-            print("\n--- TABELA ---")
+            print("\n--- STANDINGS ---")
             for line in standings_table(tournament):
                 print(line)
 
         elif action == "3":
-            print("\n--- HARMONOGRAM ---")
+            print("\n--- SCHEDULE ---")
             for line in schedule_view(tournament):
                 print(line)
 
@@ -383,7 +517,7 @@ def run_tournament_matches(
             return
 
         else:
-            print("❌ Nieprawidlowy wybor.")
+            print("Invalid choice.")
 
 
 def main() -> None:
@@ -400,10 +534,14 @@ def main() -> None:
             nickname = input("Enter nickname (optional): ").strip()
             metadata = {"nickname": nickname} if nickname else {}
             p = engine.create_individual_player(name, metadata=metadata)
-            print(f"✅ Player '{p.display_name}' registered globally.")
+            print(f"Player '{p.display_name}' registered globally.")
 
         elif choice == "2":
             sport = select_sport(engine)
+            adapter = sport.adapter
+            if adapter is None:
+                print("This sport has no console adapter registered.")
+                continue
             print(f"\n--- {sport.descriptor.display_name} Exhibition Setup ---")
 
             selected = select_contestants(engine, sport, for_tournament=False)
@@ -411,28 +549,32 @@ def main() -> None:
                 continue
 
             try:
-                config = sport.adapter.collect_config()
+                config = adapter.collect_config()
                 match = create_console_contest(
-                    sport.descriptor.id, sport.adapter, selected, config
+                    sport.descriptor.id, adapter, selected, config
                 )
             except ValueError as e:
-                print(f"❌ {e}")
+                print(f"{e}")
                 continue
 
             engine.register_active_match(match)
-            start_cmd = sport.adapter.get_start_command()
+            start_cmd = adapter.get_start_command()
             if start_cmd:
                 engine.dispatch_match_command(match.id, start_cmd)
 
-            match_loop(engine, match.id, sport.adapter)
+            match_loop(engine, match.id, adapter)
 
         elif choice == "3":
             sport = select_sport(engine)
+            adapter = sport.adapter
+            if adapter is None:
+                print("This sport has no console adapter registered.")
+                continue
             print(f"\n--- {sport.descriptor.display_name} Tournament Setup ---")
 
             t_name = input("Enter Tournament Name: ").strip()
-            selected = select_contestants(engine, sport, for_tournament=True)
-            if not selected:
+            entries = select_tournament_entries(engine, sport)
+            if not entries:
                 continue
 
             print("\nSelect Tournament Format:")
@@ -443,9 +585,9 @@ def main() -> None:
             blueprint_id = "knockout_8" if format_choice == "1" else "league"
 
             try:
-                config = sport.adapter.collect_config()
+                config = adapter.collect_config()
             except ValueError:
-                print("❌ Invalid tournament config.")
+                print("Invalid tournament config.")
                 continue
 
             tournament = engine.create_tournament(
@@ -455,52 +597,57 @@ def main() -> None:
                 match_config=config,
             )
 
-            scheduled = engine.setup_tournament(tournament, selected)
+            scheduled = engine.setup_tournament(tournament, entries)
 
-            print(f"\n🏆 --- {t_name.upper()} BRACKET GENERATED --- 🏆")
+            print(f"\n--- {t_name.upper()} BRACKET GENERATED ---")
             for i, event in enumerate(scheduled):
-                match = tournament.get_match(event.contest_id)
-                if match is None:
+                fixture_match = tournament.get_match(event.contest_id)
+                if fixture_match is None:
                     continue
-                sides = " vs ".join(c.name for c in match.contestants)
+                sides = " vs ".join(c.name for c in fixture_match.contestants)
                 print(f" Match {i + 1}: {sides}")
 
-            run_tournament_matches(engine, tournament, sport.adapter)
+            run_tournament_matches(engine, tournament, adapter)
 
             if tournament.is_completed:
-                print(f"\n🎊 TOURNAMENT '{tournament.name}' HAS CONCLUDED! 🎊")
+                print(f"\nTOURNAMENT '{tournament.name}' HAS CONCLUDED!")
                 champion_id = tournament.state.champion_id
                 if champion_id:
                     name = tournament.state.contestants.get(champion_id, champion_id)
                     print(f"Champion: {name}")
 
         elif choice == "4":
-            active = engine.active_matches
-            if not active:
-                print("❌ No matches currently suspended in memory.")
+            suspended_ids = [
+                mid
+                for mid, m in engine.active_matches.items()
+                if m.is_suspended
+            ]
+            if not suspended_ids:
+                print("No matches currently suspended in memory.")
                 continue
 
             print("\n--- Suspended Matches ---")
-            match_ids = list(active.keys())
-            for i, mid in enumerate(match_ids):
-                m = active[mid]
-                desc = " vs ".join([p.name for p in m.contestants])
+            for i, mid in enumerate(suspended_ids):
+                m = engine.active_matches[mid]
+                desc = " vs ".join(p.name for p in m.contestants)
                 print(f"[{i}] {desc} (ID: {mid[:8]}...)")
 
             try:
                 m_idx = int(input("Select match to resume: ").strip())
-                resumed = engine.get_match(match_ids[m_idx])
+                match_id = suspended_ids[m_idx]
+                resumed = engine.get_match(match_id)
                 if resumed is None:
-                    print("❌ Invalid selection.")
+                    print("Invalid selection.")
                     continue
-                resumed.notify(None)
+                resumed.resume()
                 resume_adapter = engine.get_adapter(sport_id_for_match(resumed))
                 if resume_adapter is None:
-                    print("❌ No console adapter available.")
+                    print("No console adapter available.")
                     continue
-                match_loop(engine, match_ids[m_idx], resume_adapter)
+                resume_adapter.attach_view(resumed)
+                match_loop(engine, match_id, resume_adapter)
             except (ValueError, IndexError, AttributeError):
-                print("❌ Invalid selection.")
+                print("Invalid selection.")
 
         elif choice == "5":
             print("\n--- Global Roster ---")
@@ -510,7 +657,8 @@ def main() -> None:
                 for ind_player in individuals:
                     nick = ind_player.metadata.get("nickname", "N/A")
                     print(
-                        f"- {ind_player.name} (Nickname: {nick}) | ID: {ind_player.id[:8]}"
+                        f"- {ind_player.name} (Nickname: {nick}) | "
+                        f"ID: {ind_player.id[:8]}"
                     )
             teams = engine.list_teams()
             if teams:
@@ -522,64 +670,10 @@ def main() -> None:
                 print("No contestants registered.")
 
         elif choice == "6":
-            print("\n--- Match History (Archived) ---")
-            if not engine.archived_matches:
-                print("No matches have been completed yet.")
-                continue
-
-            for mid, m in engine.archived_matches.items():
-                state = m.current_state
-                if isinstance(state, DartsContestState):
-                    desc = " vs ".join([pl.name for pl in state.players])
-                    print(f"\nMatch: {desc} (ID: {mid[:8]})")
-                    print(
-                        f"Format: {state.config.starting_score} Up | Best of {state.config.sets_to_win_match} Sets"
-                    )
-                    print("Final Scoreboard:")
-                    for pl in state.players:
-                        print(
-                            f"  - {pl.name}: {state.sets_won[pl.id]} Sets, {state.legs_won[pl.id]} Legs"
-                        )
-                elif isinstance(state, FootballContestState):
-                    desc = " vs ".join([t.name for t in state.teams])
-                    print(f"\nMatch: {desc} (ID: {mid[:8]})")
-                    via = state.decided_by.replace("_", " ")
-                    outcome = (
-                        "Draw"
-                        if state.was_draw
-                        else f"{state.winner.name if state.winner else '?'} ({via})"
-                    )
-                    if m.result.is_overridden:
-                        from src.core.tournament.ranking import (
-                            describe_two_way_result,
-                            single_first_place,
-                        )
-
-                        official = m.result.effective_result
-                        if official is None:
-                            winner_name = "?"
-                        else:
-                            label = describe_two_way_result(official.ranking())
-                            if label == "remis":
-                                winner_name = "Remis"
-                            elif label.startswith("wygral "):
-                                winner_name = label.removeprefix("wygral ")
-                            else:
-                                winner = single_first_place(official.ranking())
-                                winner_name = winner.name if winner else "?"
-                        print(
-                            f"Official Result: {winner_name} ({m.result.override_reason})"
-                        )
-                        print(f"Played Result: {outcome}")
-                    else:
-                        print(f"Result: {outcome}")
-                    print("Final Score:")
-                    for t in state.teams:
-                        print(f"  - {t.name}: {state.scores[t.id]} goals")
-                else:
-                    desc = " vs ".join([c.name for c in m.contestants])
-                    print(f"\nMatch: {desc} (ID: {mid[:8]})")
-            print("--------------------------------")
+            for line in archived_matches_view(engine):
+                print(line)
+            for line in archived_tournaments_view(engine):
+                print(line)
 
         elif choice == "7":
             print("Shutting down SDM Sports Engine. Goodbye!")

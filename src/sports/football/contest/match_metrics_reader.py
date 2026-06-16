@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from src.core.contest.contest_result import ContestResult
+from src.core.contest.match_metrics_reader import MatchMetricsReader
 from src.sports.football.contest.football_result import FootballSideMetrics
 
 
-class FootballMatchMetricsReader:
+class FootballMatchMetricsReader(MatchMetricsReader):
     """Reads player stats nested in side_metrics for presentation."""
 
     def top_scorers(self, result: ContestResult) -> list[tuple[str, int]]:

@@ -6,7 +6,9 @@ from src.core.contest import Contest
 from src.core.contestant.models import IndividualPlayer, Team
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.player_stats import FootballPlayerStats
-from src.sports.football.contest.football_contest_state import create_football_contest_state
+from src.sports.football.contest.football_contest_state import (
+    create_football_contest_state,
+)
 from src.sports.football.console.football_console_view import FootballConsoleView
 
 

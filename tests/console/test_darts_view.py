@@ -13,7 +13,9 @@ from src.sports.darts.console.darts_console_view import DartsConsoleView
 def test_darts_scoreboard_prints_correctly(capsys: pytest.CaptureFixture[str]) -> None:
     players = [IndividualPlayer("Littler"), IndividualPlayer("Humphries")]
     config = DartsMatchConfig(starting_score=501)
-    state = replace(create_darts_contest_state(players, config), current_turn=DartTurn())
+    state = replace(
+        create_darts_contest_state(players, config), current_turn=DartTurn()
+    )
 
     mock_contest = MagicMock(spec=Contest)
     mock_contest.current_state = state

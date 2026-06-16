@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from src.core.contestant.models import IndividualPlayer
-from src.core.sport.match_setup import create_console_contest
+from src.console.match_setup import create_console_contest
 from src.sports.darts.adapter import DartsConsoleAdapter
 from src.sports.darts.contest.commands import CallOcheFault, StartMatch, ThrowDart
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig

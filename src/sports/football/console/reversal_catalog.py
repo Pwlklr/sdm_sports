@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.core.contest import Contest
 from src.core.contest.command import ReverseDecision
-from src.core.console.reversal_catalog import ReversalOption, build_numbered_catalog
+from src.console.reversal_catalog import ReversalOption, build_numbered_catalog
 from src.core.contest.event import Event
 from src.sports.football.contest.commands import RevokeCaution, VarOverturnGoal
 from src.sports.football.contest.events import (
@@ -34,9 +34,7 @@ def _label_event(state: FootballContestState, event: Event) -> str:
         kind = "samoboj" if event.own_goal else "karny" if event.penalty else "gol"
         scorer = player_name_for_id(state, event.scorer_id)
         scorer_text = f" {scorer}" if scorer else ""
-        return (
-            f"{event.minute}' {kind} {_team_name(state, event.team_id)}{scorer_text}"
-        )
+        return f"{event.minute}' {kind} {_team_name(state, event.team_id)}{scorer_text}"
     if isinstance(event, PlayerCautioned):
         return (
             f"{event.minute}' zolta kartka "

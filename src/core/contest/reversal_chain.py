@@ -50,9 +50,7 @@ class RecordTargetHandler(ReversalHandler):
 
     def _contribute(self, ctx: ReversalContext) -> None:
         target_id = ctx.command.target_event_id
-        if any(
-            marker.target_event_id == target_id for marker in ctx.markers
-        ):
+        if any(marker.target_event_id == target_id for marker in ctx.markers):
             return
         ctx.markers.append(
             EventReversed(

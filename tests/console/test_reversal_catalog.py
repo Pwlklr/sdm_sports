@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.core.console.reversal_catalog import (
+from src.console.reversal_catalog import (
     build_numbered_catalog,
     parse_reversal_choice,
     resolve_catalog_choice,

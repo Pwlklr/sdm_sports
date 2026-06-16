@@ -114,7 +114,10 @@ class BracketScheduler(FixtureScheduler):
     ) -> list[ScheduledPairing]:
         pairings: list[ScheduledPairing] = []
         slots_per_round: list[list[str]] = []
-        current = [f"TBD-{i}" for i in range(2 ** int(math.ceil(math.log2(len(contestant_ids)))))]
+        current = [
+            f"TBD-{i}"
+            for i in range(2 ** int(math.ceil(math.log2(len(contestant_ids)))))
+        ]
         for i, c in enumerate(contestant_ids):
             if i < len(current):
                 current[i] = c

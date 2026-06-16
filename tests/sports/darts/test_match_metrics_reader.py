@@ -19,8 +19,9 @@ def test_darts_match_metrics_reader_reads_side_metrics() -> None:
         contestant_id="p1", sets_won=2, legs_won=5, darts_thrown=120
     )
     state = replace(state, contestant_stats=stats)
-    state = state.apply(MatchConcluded(winner_id="p1"))
-    result = DartsResultBuilder(config=config).build(state)
+    concluded = MatchConcluded(winner_id="p1")
+    state = state.apply(concluded)
+    result = DartsResultBuilder(config=config).build(state, [concluded])
 
     side = DartsMatchMetricsReader().player_totals(result)
     assert isinstance(side, DartsSideMetrics)

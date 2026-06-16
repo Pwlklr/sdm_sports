@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from enum import Enum
 from typing import Protocol
 
 from typing_extensions import Self
@@ -9,7 +8,6 @@ from typing_extensions import Self
 from src.core.tournament.event import TournamentProjectionEvent
 from src.core.tournament.match_outcome_snapshot import (
     MatchOutcomeSnapshot,
-    PointsDeltaSnapshot,
 )
 from src.core.tournament.phase import PhaseSchedulingStatus
 from src.core.tournament.phase_format import PhaseFormat
@@ -45,7 +43,8 @@ class BracketSlot:
 
 
 class PhaseState(Protocol):
-    format: PhaseFormat
+    @property
+    def format(self) -> PhaseFormat: ...
 
     @property
     def fixtures(self) -> tuple[FixtureRef, ...]: ...
@@ -89,7 +88,9 @@ class RoundRobinPhaseState:
             for cid in (fact.side_a_id, fact.side_b_id):
                 if cid not in standings:
                     standings[cid] = GroupStandingRow(contestant_id=cid)
-            return replace(self, fixtures=self.fixtures + (fixture,), standings=standings)
+            return replace(
+                self, fixtures=self.fixtures + (fixture,), standings=standings
+            )
 
         if isinstance(fact, MatchOutcomeRecorded):
             return self._apply_outcome(fact.snapshot)
@@ -139,9 +140,7 @@ class RoundRobinPhaseState:
 
     def pending_fixture_contest_ids(self) -> frozenset[str]:
         return frozenset(
-            f.contest_id
-            for f in self.fixtures
-            if f.contest_id not in self.outcomes
+            f.contest_id for f in self.fixtures if f.contest_id not in self.outcomes
         )
 
 
@@ -242,9 +241,7 @@ class BracketPhaseState:
 
     def pending_fixture_contest_ids(self) -> frozenset[str]:
         return frozenset(
-            f.contest_id
-            for f in self.fixtures
-            if f.contest_id not in self.outcomes
+            f.contest_id for f in self.fixtures if f.contest_id not in self.outcomes
         )
 
     def round_complete(self, round_index: int) -> bool:

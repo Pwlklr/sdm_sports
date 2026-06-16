@@ -4,8 +4,10 @@ from src.core.contestant.models import IndividualPlayer, Team
 from src.core.shared.command_rejected import CommandRejected
 from src.core.tournament.tournament_state import DisciplineState
 from src.sports.football.register_tournament import FootballDisciplineCarryover
+import src.sports.football.register_contest  # noqa: F401
 from src.sports.football.contest.commands import (
     CommitFoul,
+    ScoreGoal,
     StartMatch,
     SubmitLineup,
     SubstitutePlayer,
@@ -44,6 +46,19 @@ def _submit_home_xi(match: object, count: int = 4) -> None:
     starting = tuple(f"h{i}" for i in range(1, count + 1))
     bench = tuple(f"h{i}" for i in range(count + 1, count + 3))
     match.handle(SubmitLineup(team_index=0, starting=starting, bench=bench))
+
+
+def test_bench_player_cannot_score() -> None:
+    match = _match()
+    _submit_home_xi(match)
+    with pytest.raises(CommandRejected, match="not on the pitch"):
+        match.handle(ScoreGoal(team_index=0, minute=5, scorer_id="h5"))
+
+
+def test_scorer_requires_lineup() -> None:
+    match = _match()
+    with pytest.raises(CommandRejected, match="lineup before assigning a scorer"):
+        match.handle(ScoreGoal(team_index=0, minute=5, scorer_id="h1"))
 
 
 def test_submit_lineup_and_substitution() -> None:
@@ -102,7 +117,7 @@ def test_lineup_rejects_suspended_player() -> None:
 
 def test_lineup_rejects_too_few_players() -> None:
     match = _match()
-    with pytest.raises(CommandRejected, match="co najmniej"):
+    with pytest.raises(CommandRejected, match="at least"):
         match.handle(SubmitLineup(team_index=0, starting=("h1", "h2", "h3"), bench=()))
 
 
@@ -114,21 +129,72 @@ def test_insufficient_players_on_pitch_awards_walkover_to_opponent() -> None:
     match.handle(CommitFoul(team_index=0, minute=30, card="red", offender_id="h3"))
 
     assert match.current_state.is_finished
-    assert match.current_state.decided_by == "walkover_insufficient_players"
+    assert match.get_played_result().decided_by == "walkover_insufficient_players"
     assert match.current_state.winner is match.contestants[1]
     assert match.current_state.active_players_on_pitch("home") == 1
 
 
+def test_lineup_rejects_player_not_on_tournament_squad() -> None:
+    home = Team("Home", "home")
+    away = Team("Away", "away")
+    for index in range(1, 7):
+        home.add_player(IndividualPlayer(f"H{index}", f"h{index}"))
+    away.add_player(IndividualPlayer("A1", "a1"))
+    away.add_player(IndividualPlayer("A2", "a2"))
+    eligible = {
+        "home": frozenset(f"h{i}" for i in range(1, 5)),
+        "away": frozenset({"a1", "a2"}),
+    }
+    match = ContestFactory.create(
+        FOOTBALL_SPORT.id,
+        [home, away],
+        FootballMatchConfig(players_on_pitch=4),
+        eligible_squads=eligible,
+    )
+    with pytest.raises(CommandRejected, match="tournament squad"):
+        match.handle(
+            SubmitLineup(
+                team_index=0,
+                starting=("h1", "h2", "h3", "h5"),
+                bench=(),
+            )
+        )
+
+
+def test_tournament_match_requires_lineups_before_start() -> None:
+    home = Team("Home", "home")
+    away = Team("Away", "away")
+    for index in range(1, 7):
+        home.add_player(IndividualPlayer(f"H{index}", f"h{index}"))
+    away.add_player(IndividualPlayer("A1", "a1"))
+    away.add_player(IndividualPlayer("A2", "a2"))
+    eligible = {
+        "home": frozenset(f"h{i}" for i in range(1, 7)),
+        "away": frozenset({"a1", "a2"}),
+    }
+    match = ContestFactory.create(
+        FOOTBALL_SPORT.id,
+        [home, away],
+        FootballMatchConfig(players_on_pitch=2, min_players_on_pitch=2),
+        eligible_squads=eligible,
+    )
+    with pytest.raises(CommandRejected, match="Submit match squad"):
+        match.handle(StartMatch())
+
+
 def test_red_card_carries_over_as_suspension() -> None:
     match = _match()
+    _submit_home_xi(match)
     match.handle(CommitFoul(team_index=0, minute=30, card="red", offender_id="h1"))
     from dataclasses import replace
 
     from src.sports.football.register_tournament import FootballPhaseOutcomeInterpreter
-    from src.sports.football.contest.football_result_builder import FootballResultBuilder
+    from src.sports.football.contest.football_result_builder import (
+        FootballResultBuilder,
+    )
 
     state = replace(match.current_state, is_finished=True)
-    result = FootballResultBuilder(config=FootballMatchConfig()).build(state)
+    result = FootballResultBuilder(config=FootballMatchConfig()).build(state, match.history)
     snapshot = FootballPhaseOutcomeInterpreter().interpret(match.id, result)
     carryover = FootballDisciplineCarryover()
     discipline = DisciplineState()
@@ -140,7 +206,9 @@ def test_accumulated_yellows_trigger_suspension() -> None:
     from dataclasses import replace
 
     from src.sports.football.register_tournament import FootballPhaseOutcomeInterpreter
-    from src.sports.football.contest.football_result_builder import FootballResultBuilder
+    from src.sports.football.contest.football_result_builder import (
+        FootballResultBuilder,
+    )
     from src.sports.football.contest.player_stats import FootballPlayerStats
 
     carryover = FootballDisciplineCarryover()
@@ -153,6 +221,6 @@ def test_accumulated_yellows_trigger_suspension() -> None:
     stats = dict(state.player_stats)
     stats["h1"] = FootballPlayerStats(player_id="h1", yellow_cards=2)
     state = replace(state, player_stats=stats)
-    snap = interpreter.interpret(match.id, builder.build(state))
+    snap = interpreter.interpret(match.id, builder.build(state, match.history))
     suspensions = carryover.carryover(snap, discipline)
     assert ("h1", 1) in suspensions

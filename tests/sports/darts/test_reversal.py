@@ -16,7 +16,9 @@ def test_revoke_winning_dart_withdraws_leg_via_caused_by() -> None:
     match.handle(ThrowDart(sector=6, multiplier=2))
     winning_dart = next(e for e in match.history if isinstance(e, DartScored))
 
-    match.handle(RevokeDartThrow(target_event_id=winning_dart.event_id, reason="review"))
+    match.handle(
+        RevokeDartThrow(target_event_id=winning_dart.event_id, reason="review")
+    )
 
     assert match.current_state.legs_won["a"] == 0
     assert match.current_state.scores["a"] == config.starting_score

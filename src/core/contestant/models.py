@@ -72,6 +72,9 @@ class Team(Contestant):
         """Returns a copy of the current roster."""
         return self._roster.copy()
 
+    def __str__(self) -> str:
+        return self.name
+
     @property
     def display_name(self) -> str:
         return f"{self.name} ({len(self._roster)} players)"

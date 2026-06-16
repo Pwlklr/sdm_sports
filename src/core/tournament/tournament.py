@@ -13,17 +13,19 @@ from src.core.tournament.command import (
     CloseRegistration,
     OpenRegistration,
     RegisterContestantRef,
+    RegisterSquad,
     TournamentCommand,
 )
 from src.core.tournament.event import (
     TournamentEvent,
     TournamentProjectionEvent,
 )
-from src.core.tournament.match_provider import MatchProvider
-from src.core.tournament.phase_standings_view import PhaseStandingsView
 from src.core.tournament.sport_tournament_profile import SportTournamentProfile
 from src.core.tournament.sport_tournament_registry import SportTournamentRegistry
-from src.core.tournament.tournament_policy import DefaultTournamentPolicy, TournamentPolicy
+from src.core.tournament.tournament_policy import (
+    DefaultTournamentPolicy,
+    TournamentPolicy,
+)
 from src.core.tournament.tournament_state import DefaultTournamentState
 
 
@@ -39,12 +41,15 @@ class ContestMatchProvider:
         match_config: Any,
         contest_id: str | None = None,
         suspended_player_ids: frozenset[str] | None = None,
+        eligible_squads: dict[str, frozenset[str]] | None = None,
     ) -> Contest:
         from src.core.contest.contest_factory import ContestFactory
 
         options: dict[str, Any] = {}
         if suspended_player_ids:
             options["suspended_player_ids"] = suspended_player_ids
+        if eligible_squads:
+            options["eligible_squads"] = eligible_squads
         contest = ContestFactory.create(
             self._sport_id,
             sides,
@@ -164,10 +169,19 @@ class Tournament:
     def get_match(self, contest_id: str) -> Contest | None:
         return self._match_registry.get(contest_id)
 
+    def register_match(self, match: Contest) -> None:
+        """Inject an externally-created contest into the tournament match registry."""
+        self._match_registry[match.id] = match
+
     def register_contestant(self, contestant: Contestant) -> list[TournamentEvent]:
         self._contestant_registry[contestant.id] = contestant
+        return self.handle(RegisterContestantRef(contestant=contestant))
+
+    def register_squad(
+        self, contestant_id: str, player_ids: tuple[str, ...]
+    ) -> list[TournamentEvent]:
         return self.handle(
-            RegisterContestantRef(contestant=contestant)
+            RegisterSquad(contestant_id=contestant_id, player_ids=player_ids)
         )
 
     def open_registration(self) -> list[TournamentEvent]:
@@ -220,9 +234,6 @@ class Tournament:
         for event in self._history:
             if isinstance(event, TournamentProjectionEvent):
                 self._state = self._state.apply(event)
-
-    def standings_view(self) -> PhaseStandingsView:
-        return PhaseStandingsView(self._profile.tiebreaker)
 
     def active_phase_id(self) -> str | None:
         return self._state.active_phase_id

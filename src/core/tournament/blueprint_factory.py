@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from src.core.tournament.blueprint import (
@@ -17,7 +18,46 @@ class TournamentBlueprintFactory:
 
     @classmethod
     def register(cls, blueprint: TournamentBlueprint) -> None:
+        errors = blueprint.validate()
+        if errors:
+            raise ValueError(
+                f"Invalid blueprint '{blueprint.id}': " + "; ".join(errors)
+            )
         cls._blueprints[blueprint.id] = blueprint
+
+    @classmethod
+    def blueprint(
+        cls, bp_id: str | None = None
+    ) -> Callable[
+        [Callable[[], TournamentBlueprint]], Callable[[], TournamentBlueprint]
+    ]:
+        """Decorator: registers the returned ``TournamentBlueprint`` by id.
+
+        Usage::
+
+            @TournamentBlueprintFactory.blueprint()
+            def my_league() -> TournamentBlueprint:
+                return TournamentBlueprint(id="my_league", ...)
+        """
+
+        def decorator(
+            fn: Callable[[], TournamentBlueprint],
+        ) -> Callable[[], TournamentBlueprint]:
+            bp = fn()
+            actual_id = bp_id or bp.id
+            if actual_id != bp.id:
+                raise ValueError(
+                    f"Blueprint id mismatch: decorator says '{actual_id}', "
+                    f"blueprint.id is '{bp.id}'"
+                )
+            cls.register(bp)
+            return fn
+
+        return decorator
+
+    @classmethod
+    def list_ids(cls) -> list[str]:
+        return sorted(cls._blueprints.keys())
 
     @classmethod
     def get(cls, blueprint_id: str) -> TournamentBlueprint:
@@ -61,9 +101,7 @@ def _register_defaults() -> None:
                     format=PhaseFormat.ROUND_ROBIN,
                     scheduling_mode=SchedulingMode.FIXED,
                     match_config=None,
-                    qualification=QualificationRule(
-                        mode=QualificationMode.TOP_N, n=1
-                    ),
+                    qualification=QualificationRule(mode=QualificationMode.TOP_N, n=1),
                 ),
             ),
         )
@@ -79,9 +117,7 @@ def _register_defaults() -> None:
                     format=PhaseFormat.SINGLE_ELIMINATION,
                     scheduling_mode=SchedulingMode.PROGRESSIVE,
                     match_config=None,
-                    qualification=QualificationRule(
-                        mode=QualificationMode.CHAMPION
-                    ),
+                    qualification=QualificationRule(mode=QualificationMode.CHAMPION),
                 ),
             ),
         )
@@ -97,9 +133,7 @@ def _register_defaults() -> None:
                     format=PhaseFormat.DOUBLE_ELIMINATION,
                     scheduling_mode=SchedulingMode.PROGRESSIVE,
                     match_config=None,
-                    qualification=QualificationRule(
-                        mode=QualificationMode.CHAMPION
-                    ),
+                    qualification=QualificationRule(mode=QualificationMode.CHAMPION),
                 ),
             ),
         )
@@ -126,9 +160,7 @@ def _register_defaults() -> None:
                     format=PhaseFormat.SINGLE_ELIMINATION,
                     scheduling_mode=SchedulingMode.PROGRESSIVE,
                     match_config=None,
-                    qualification=QualificationRule(
-                        mode=QualificationMode.CHAMPION
-                    ),
+                    qualification=QualificationRule(mode=QualificationMode.CHAMPION),
                     requires="group",
                 ),
             ),

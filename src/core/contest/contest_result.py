@@ -27,3 +27,12 @@ class ContestResult(ABC):
     @abstractmethod
     def side_metrics(self) -> SideMetrics:
         pass
+
+    @property
+    def decided_by(self) -> str:
+        """How the contest was decided (e.g. 'regulation', 'penalties', 'walkover').
+
+        Sport-specific subclasses override this to expose the concluded event reason.
+        Returns an empty string when the subclass does not provide this information.
+        """
+        return ""

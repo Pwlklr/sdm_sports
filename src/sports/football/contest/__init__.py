@@ -27,7 +27,10 @@ from src.sports.football.contest.events import (
 )
 from src.sports.football.contest.football_result import FootballResult
 from src.sports.football.contest.football_rule_set import FootballRuleSet
-from src.sports.football.contest.football_contest_state import FootballContestState, MatchPhase
+from src.sports.football.contest.football_contest_state import (
+    FootballContestState,
+    MatchPhase,
+)
 
 __all__ = [
     "AwardWalkover",
