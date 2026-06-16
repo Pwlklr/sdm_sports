@@ -50,27 +50,27 @@ def test_darts_timeline_full_match(capsys) -> None:
 
     lines = build_darts_timeline(contest)
     assert len(lines) == 9
-    assert "-- mecz rozpoczety" in lines[0]
-    assert "-- nowy leg" in lines[1]
-    assert "Luke Littler: 20 x3 = 60 pkt" in lines[2]
+    assert "-- match started" in lines[0]
+    assert "-- new leg" in lines[1]
+    assert "Luke Littler: 20 x3 = 60 pts" in lines[2]
     assert "Luke Littler: BUST" in lines[3]
-    assert "-- koniec tury" in lines[4]
-    assert "** leg dla Luke Littler" in lines[5]
-    assert "*** set dla Luke Littler" in lines[6]
-    assert "== koniec meczu" in lines[7]
-    assert "(wycofano zdarzenie - powod: Oche Fault)" in lines[8]
+    assert "-- end of turn" in lines[4]
+    assert "** leg to Luke Littler" in lines[5]
+    assert "*** set to Luke Littler" in lines[6]
+    assert "== match ended" in lines[7]
+    assert "(event reversed - reason: Oche Fault)" in lines[8]
 
     # Test printing behavior
     print_darts_timeline(contest)
     out = capsys.readouterr().out
-    assert "PRZEBIEG MECZU" in out
+    assert "MATCH TIMELINE" in out
     assert "Luke Littler: BUST" in out
 
     # Test printing behavior when empty
     contest.history = []
     print_darts_timeline(contest)
     out_empty = capsys.readouterr().out
-    assert "(brak zdarzen)" in out_empty
+    assert "(no events)" in out_empty
 
 
 def test_darts_timeline_unknown_player() -> None:

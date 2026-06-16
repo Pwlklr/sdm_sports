@@ -27,7 +27,7 @@ class DartsConsoleAdapter(ConsoleAdapter):
         return DARTS_SPORT
 
     def collect_config(self) -> DartsMatchConfig:
-        print("\nConfig: 1. Domyslny (501)  2. Szybki (301)  3. Wlasny")
+        print("\nConfig: 1. Default (501)  2. Quick (301)  3. Custom")
         choice = input("Choice [Default 1]: ").strip() or "1"
         if choice == "2":
             return DartsMatchConfig.quick_301()
@@ -126,24 +126,24 @@ class DartsConsoleAdapter(ConsoleAdapter):
         if len(parts) == 1:
             for line in format_reversal_menu(
                 catalog,
-                title="Zdarzenia do wycofania",
-                usage="reverse <numer>",
-                empty_label="(brak zdarzen do wycofania)",
+                title="Events to reverse",
+                usage="reverse <number>",
+                empty_label="(no events to reverse)",
             ):
                 print(line)
             return None
 
         choice = parse_reversal_choice(parts)
         if choice is None:
-            print("❌ Uzycie: reverse <numer>")
+            print("❌ Usage: reverse <number>")
             return None
 
         option = resolve_catalog_choice(catalog, choice)
         if option is None:
-            print(f"❌ Zdarzenie numer '{parts[1]}' nie istnieje.")
+            print(f"❌ Event number '{parts[1]}' does not exist.")
             return None
 
-        print(f"✅ Wycofano zdarzenie nr {choice}.")
+        print(f"✅ Reversed event #{choice}.")
         return darts_reverse_command(option.event_id)
 
     def get_start_command(self) -> Optional[Command]:

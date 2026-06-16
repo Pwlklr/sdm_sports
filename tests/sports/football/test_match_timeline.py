@@ -41,7 +41,7 @@ def test_match_timeline_full_match(mock_player_name, capsys) -> None:
     contest.current_state = state
 
     mock_kind = MagicMock()
-    mock_kind.value = "1. polowa"
+    mock_kind.value = "1st half"
 
     # EXACT MATCH TO events.py kwargs
     contest.history = [
@@ -59,24 +59,24 @@ def test_match_timeline_full_match(mock_player_name, capsys) -> None:
         PenaltyKickTaken(event_id="e8", team_id="t1", scored=True),
         PenaltyKickTaken(event_id="e9", team_id="t1", scored=False),
         MatchConcluded(event_id="e10", decided_by="REGULATION_TIME"),
-        EventReversed(event_id="e11", target_event_id="e2", reason="VAR SPALONY"),
+        EventReversed(event_id="e11", target_event_id="e2", reason="VAR OFFSIDE"),
     ]
 
     lines = build_match_timeline(contest)
     assert len(lines) == 13
-    assert "rozpoczety" in lines[0]
-    assert "[ANULOWANY]" in lines[1] and "GOL" in lines[1]
-    assert "samobojczy" in lines[2]
-    assert "karny" in lines[3]
-    assert "zolta kartka P1" in lines[4]
-    assert "czerwona kartka P1" in lines[5]
-    assert "zmiana: P1 -> P1" in lines[6]
-    assert "koniec okresu" in lines[7]
-    assert "seria rzutow karnych" in lines[8]
-    assert "trafiony" in lines[9]
-    assert "obroniony/niecelny" in lines[10]
+    assert "started" in lines[0]
+    assert "[DISALLOWED]" in lines[1] and "GOAL" in lines[1]
+    assert "own goal" in lines[2]
+    assert "penalty" in lines[3]
+    assert "yellow card P1" in lines[4]
+    assert "red card P1" in lines[5]
+    assert "sub: P1 -> P1" in lines[6]
+    assert "period ended" in lines[7]
+    assert "penalty shootout" in lines[8]
+    assert "scored" in lines[9]
+    assert "saved/missed" in lines[10]
     assert "REGULATION TIME" in lines[11]
-    assert "(VAR) wycofano zdarzenie" in lines[12]
+    assert "(VAR) event reversed" in lines[12]
 
     # Test active_goals (e2 is reversed, so only e2b and e2c should remain)
     goals = active_goals(contest)
@@ -87,14 +87,14 @@ def test_match_timeline_full_match(mock_player_name, capsys) -> None:
     # Test Printing behavior
     print_match_timeline(contest)
     out = capsys.readouterr().out
-    assert "PRZEBIEG MECZU" in out
-    assert "samobojczy" in out
+    assert "MATCH TIMELINE" in out
+    assert "own goal" in out
 
     # Test Empty Printing behavior
     contest.history = []
     print_match_timeline(contest)
     out_empty = capsys.readouterr().out
-    assert "(brak zdarzen)" in out_empty
+    assert "(no events)" in out_empty
 
 
 def test_match_timeline_unknown_entities() -> None:

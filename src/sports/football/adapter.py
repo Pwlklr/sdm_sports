@@ -33,7 +33,7 @@ class FootballConsoleAdapter(ConsoleAdapter):
         return FOOTBALL_SPORT
 
     def collect_config(self) -> FootballMatchConfig:
-        print("\nConfig: 1. Domyslny (FIFA)  2. Liga  3. Puchar  4. Wlasny")
+        print("\nConfig: 1. Default (FIFA)  2. League  3. Cup  4. Custom")
         choice = input("Choice [Default 1]: ").strip() or "1"
         if choice == "2":
             return FootballMatchConfig.league()
@@ -115,31 +115,31 @@ class FootballConsoleAdapter(ConsoleAdapter):
 
         if len(parts) == 1:
             title = (
-                "VAR: wybierz gol do anulowania"
+                "VAR: choose goal to disallow"
                 if goals_only
-                else "Zdarzenia do wycofania"
+                else "Events to reverse"
             )
             for line in format_reversal_menu(
                 catalog,
                 title=title,
-                usage=f"{verb} <numer>",
-                empty_label="(brak zdarzen do wycofania)",
+                usage=f"{verb} <number>",
+                empty_label="(no events to reverse)",
             ):
                 print(line)
             return None
 
         choice = parse_reversal_choice(parts)
         if choice is None:
-            print(f"❌ Uzycie: {verb} <numer>")
+            print(f"❌ Usage: {verb} <number>")
             return None
 
         option = resolve_catalog_choice(catalog, choice)
         if option is None:
-            print(f"❌ Zdarzenie numer '{parts[1]}' nie istnieje.")
+            print(f"❌ Event number '{parts[1]}' does not exist.")
             return None
 
         reason = "var" if goals_only else "reverse"
-        print(f"✅ Wycofano zdarzenie nr {choice}.")
+        print(f"✅ Reversed event #{choice}.")
         return football_reverse_command(contest, option.event_id, reason=reason)
 
     def get_start_command(self) -> Optional[Command]:

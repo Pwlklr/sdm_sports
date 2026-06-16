@@ -58,7 +58,7 @@ def test_var_by_number_only_lists_goals(capsys) -> None:
     adapter.parse_command("var", match)
     output = capsys.readouterr().out
     assert "1." in output
-    assert "gol" in output.lower() or "10'" in output
+    assert "goal" in output.lower() or "10'" in output
 
 
 def test_revoke_caution_command_from_reverse() -> None:

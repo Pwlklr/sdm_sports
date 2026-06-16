@@ -26,7 +26,7 @@ def active_matches(tournament: Tournament) -> List[Contest]:
 def standings_table(tournament: Tournament) -> List[str]:
     phase_id = tournament.active_phase_id()
     if phase_id is None:
-        return ["(brak aktywnej fazy)"]
+        return ["(no active phase)"]
     ps = tournament.state.phase_states.get(phase_id)
     if not isinstance(ps, RoundRobinPhaseState):
         return []
@@ -53,37 +53,37 @@ def match_session_tag(match: Contest) -> str:
 
 def _format_fixture_status(contest: Contest | None) -> str:
     if contest is None:
-        return "oczekuje"
+        return "pending"
     status = contest.session_status
     if status is ContestSessionStatus.SUSPENDED:
-        return "wstrzymany"
+        return "suspended"
     if status is ContestSessionStatus.IN_PROGRESS:
-        return "w trakcie"
+        return "in progress"
     if status is ContestSessionStatus.FINISHED:
         return _format_final_status(contest)
-    return "oczekuje"
+    return "pending"
 
 
 def _format_final_status(contest: Contest) -> str:
     if not contest.current_state.is_finished:
-        return "oczekuje"
+        return "pending"
     try:
         result = contest.get_official_result()
     except ValueError:
-        return "oczekuje"
+        return "pending"
     outcome = classify_two_way_result(result.ranking())
     if outcome.kind is TwoWayResultKind.DRAW:
-        return "remis"
+        return "draw"
     if outcome.winner is not None:
-        return f"wygral {outcome.winner.name}"
-    return "zakonczony"
+        return f"won {outcome.winner.name}"
+    return "finished"
 
 
 def schedule_view(tournament: Tournament) -> List[str]:
     state = tournament.state
     phase_id = tournament.active_phase_id()
     if phase_id is None:
-        return ["(brak aktywnej fazy)"]
+        return ["(no active phase)"]
     ps = state.phase_states.get(phase_id)
     if ps is None:
         return []
