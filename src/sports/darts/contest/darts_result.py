@@ -18,6 +18,7 @@ class DartsContestantMetrics:
 @dataclass(frozen=True, kw_only=True)
 class DartsSideMetrics(SideMetrics):
     by_contestant_id: dict[str, DartsContestantMetrics]
+    decided_by: str = "regulation"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,15 +36,17 @@ class DartsResult(ContestResult):
         return self.side
 
     @property
+    def decided_by(self) -> str:
+        return self.side.decided_by
+
+    @property
     def sets_won(self) -> dict[str, int]:
         return {
-            cid: metrics.sets_won
-            for cid, metrics in self.side.by_contestant_id.items()
+            cid: metrics.sets_won for cid, metrics in self.side.by_contestant_id.items()
         }
 
     @property
     def legs_won(self) -> dict[str, int]:
         return {
-            cid: metrics.legs_won
-            for cid, metrics in self.side.by_contestant_id.items()
+            cid: metrics.legs_won for cid, metrics in self.side.by_contestant_id.items()
         }

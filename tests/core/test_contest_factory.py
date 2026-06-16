@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from src.core.contest import Contest, ContestFactory
 from src.core.contest.command import Command
 from src.core.contest.contest_factory import ContestAssembly
-from src.core.contest.event import Event
+from src.core.contest.event import Event, ProjectionEvent
 from src.core.contestant import IndividualPlayer
 from src.core.contest.rule_set import RuleSet
 from tests.core.contest_test_support import (
@@ -21,7 +21,7 @@ class MockCommand(Command):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MockFact(Event):
+class MockFact(ProjectionEvent):
     pass
 
 
@@ -34,31 +34,36 @@ class MockState(StatefulContestState):
 
 
 class MockRuleSet(RuleSet):
-    def decide_mock(self, command: MockCommand, state: MockState) -> list[Event]:
+    def decide_mock(
+        self, command: MockCommand, state: MockState, history: list[Event]
+    ) -> list[Event]:
         return [MockFact()]
 
     command_handlers = {MockCommand: decide_mock}
     reaction_handlers = {}
 
 
+_MOCK_SPORT_ID = "_test_mock_sport"
+
+
 def _register_mock_builder() -> None:
-    def build(
-        contestants: list, _config: object, **_: object
-    ) -> ContestAssembly:
+    def build(contestants: list, _config: object, **_: object) -> ContestAssembly:
         return ContestAssembly(
             state=MockState(contestants),
             ruleset=MockRuleSet(),
             result_builder=StubResultBuilder(),
         )
 
-    if "mock" not in ContestFactory._builders:
-        ContestFactory.register("mock", build)
+    try:
+        ContestFactory.register(_MOCK_SPORT_ID, build)
+    except ValueError:
+        pass  # already registered in a previous test run
 
 
 def test_contest_factory_creates_contest_for_registered_sport() -> None:
     _register_mock_builder()
     p1 = IndividualPlayer("Player 1")
-    contest = ContestFactory.create("mock", [p1], object())
+    contest = ContestFactory.create(_MOCK_SPORT_ID, [p1], object())
 
     assert isinstance(contest.current_state, MockState)
     assert contest.contestants == [p1]

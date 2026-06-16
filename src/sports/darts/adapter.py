@@ -2,9 +2,9 @@ from typing import Optional
 
 from src.core.contest import Contest
 from src.core.contest.command import Command, ReverseDecision
-from src.core.console.reversal_catalog import (
+from src.console.reversal_catalog import (
+    format_reversal_menu,
     parse_reversal_choice,
-    print_reversal_menu,
     resolve_catalog_choice,
 )
 from src.core.sport.console_adapter import ConsoleAdapter
@@ -27,7 +27,7 @@ class DartsConsoleAdapter(ConsoleAdapter):
         return DARTS_SPORT
 
     def collect_config(self) -> DartsMatchConfig:
-        print("\nConfig: 1. Domyslny (501)  2. Szybki (301)  3. Wlasny")
+        print("\nConfig: 1. Default (501)  2. Quick (301)  3. Custom")
         choice = input("Choice [Default 1]: ").strip() or "1"
         if choice == "2":
             return DartsMatchConfig.quick_301()
@@ -60,10 +60,15 @@ class DartsConsoleAdapter(ConsoleAdapter):
         )
 
     def attach_view(self, contest: Contest) -> None:
+        contest.detach_instances_of(DartsConsoleView)
         contest.attach(DartsConsoleView())
+        if contest.current_state.match_started:
+            contest.notify(None)
 
     def get_input_prompt(self, contest: Contest) -> str:
-        return "Action ('<sector> <mult>', '0', 'fault', 'log', 'reverse [nr]', 'suspend')"
+        return (
+            "Action ('<sector> <mult>', '0', 'fault', 'log', 'reverse [nr]', 'suspend')"
+        )
 
     def parse_command(self, user_input: str, contest: Contest) -> Optional[Command]:
         cleaned = user_input.strip().lower()
@@ -119,25 +124,37 @@ class DartsConsoleAdapter(ConsoleAdapter):
         parts = cleaned.split()
 
         if len(parts) == 1:
-            print_reversal_menu(
+            for line in format_reversal_menu(
                 catalog,
-                title="Zdarzenia do wycofania",
-                usage="reverse <numer>",
-            )
+                title="Events to reverse",
+                usage="reverse <number>",
+                empty_label="(no events to reverse)",
+            ):
+                print(line)
             return None
 
         choice = parse_reversal_choice(parts)
         if choice is None:
-            print("❌ Uzycie: reverse <numer>")
+            print("❌ Usage: reverse <number>")
             return None
 
         option = resolve_catalog_choice(catalog, choice)
         if option is None:
-            print(f"❌ Zdarzenie numer '{parts[1]}' nie istnieje.")
+            print(f"❌ Event number '{parts[1]}' does not exist.")
             return None
 
-        print(f"✅ Wycofano zdarzenie nr {choice}.")
+        print(f"✅ Reversed event #{choice}.")
         return darts_reverse_command(option.event_id)
 
     def get_start_command(self) -> Optional[Command]:
         return StartMatch()
+
+    def format_archived_match_lines(self, match_id: str, contest: Contest) -> list[str]:
+        state = contest.current_state
+        if not isinstance(state, DartsContestState):
+            return []
+        from src.sports.darts.console.archive_view import (
+            format_darts_archived_match_lines,
+        )
+
+        return format_darts_archived_match_lines(match_id, contest, state)

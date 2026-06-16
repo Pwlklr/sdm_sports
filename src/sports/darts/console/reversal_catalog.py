@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.core.contest import Contest
 from src.core.contest.command import ReverseDecision
-from src.core.console.reversal_catalog import ReversalOption, build_numbered_catalog
+from src.console.reversal_catalog import ReversalOption, build_numbered_catalog
 from src.core.contest.event import Event
 from src.sports.darts.contest.commands import RevokeDartThrow
 from src.sports.darts.contest.darts_contest_state import DartsContestState

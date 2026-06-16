@@ -31,9 +31,7 @@ class RuleSet(ABC):
     command_handlers: ClassVar[dict[type[Command], Handler]] = {}
     reaction_handlers: ClassVar[dict[type[Event], Handler]] = {}
 
-    def __init__(
-        self, reversal_chain: ReversalHandler | None = None
-    ) -> None:
+    def __init__(self, reversal_chain: ReversalHandler | None = None) -> None:
         self._reversal_chain = reversal_chain or default_reversal_chain()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -59,10 +57,15 @@ class RuleSet(ABC):
         cls.command_handlers = merged_cmd
         cls.reaction_handlers = merged_react
 
-    def decide(self, command: Command, state: ContestState) -> list[Event]:
+    def decide(
+        self,
+        command: Command,
+        state: ContestState,
+        history: list[Event] | None = None,
+    ) -> list[Event]:
         handler = self.command_handlers.get(type(command))
         if handler:
-            return handler(self, command, state)
+            return handler(self, command, state, history or [])
         return []
 
     def react(self, fact: Event, state: ContestState) -> list[Event]:

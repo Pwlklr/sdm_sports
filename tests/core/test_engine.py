@@ -6,8 +6,11 @@ from dataclasses import dataclass
 
 from src.core.contest.command import Command
 from tests.core.contest_test_support import StatefulContestState, make_contest
-from src.core.contest.event import Event
+from src.core.contest.event import Event, ProjectionEvent
+import src.sports.darts.register_contest  # noqa: F401
+import src.sports.darts.register_tournament  # noqa: F401
 from src.core.system.sports_system_engine import SportsSystemEngine
+from src.sports.darts.descriptor import DARTS_SPORT
 from src.core.contest.rule_set import RuleSet
 
 
@@ -17,7 +20,7 @@ class DummyCommand(Command):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DummyFact(Event):
+class DummyFact(ProjectionEvent):
     pass
 
 
@@ -30,7 +33,9 @@ class DummyState(StatefulContestState):
 
 
 class DummyRuleSet(RuleSet):
-    def decide_dummy(self, command: DummyCommand, state: DummyState) -> list[Event]:
+    def decide_dummy(
+        self, command: DummyCommand, state: DummyState, history: list[Event]
+    ) -> list[Event]:
         return [DummyFact()]
 
     command_handlers = {DummyCommand: decide_dummy}
@@ -54,12 +59,17 @@ def test_engine_player_management() -> None:
 
 def test_engine_tournament_management() -> None:
     engine = SportsSystemEngine()
-    t1 = engine.create_tournament("World Championship")
+    t1 = engine.create_tournament(
+        "World Championship",
+        DARTS_SPORT.id,
+        "league",
+    )
 
     assert t1.id in engine.tournaments
     assert engine.tournaments[t1.id].name == "World Championship"
-    assert t1.registration is not None
-    assert t1.scheduler is not None
+    assert t1.state.sport_id == DARTS_SPORT.id
+    assert t1.state.blueprint_id == "league"
+    assert len(t1.state.phases) == 1
 
 
 def test_engine_match_dispatch() -> None:

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import Enum
+
 from src.core.contest.contest_result import RankedEntry
 from src.core.contestant.models import Contestant
 
@@ -53,10 +56,25 @@ def qualifiers_up_to_place(
     return [entry.contestant for entry in qualified]
 
 
-def describe_two_way_result(ranking: tuple[RankedEntry, ...]) -> str:
+class TwoWayResultKind(Enum):
+    UNDECIDED = "undecided"
+    DRAW = "draw"
+    WINNER = "winner"
+
+
+@dataclass(frozen=True)
+class TwoWayOutcome:
+    """Sport-neutral classification of a finished two-way contest result."""
+
+    kind: TwoWayResultKind
+    winner: Contestant | None = None
+
+
+def classify_two_way_result(ranking: tuple[RankedEntry, ...]) -> TwoWayOutcome:
+    """Classify a two-way ranking without producing display text."""
     if is_ex_aequo_first(ranking):
-        return "remis"
+        return TwoWayOutcome(TwoWayResultKind.DRAW)
     winner = single_first_place(ranking)
     if winner is not None:
-        return f"wygral {winner.name}"
-    return "zakonczony"
+        return TwoWayOutcome(TwoWayResultKind.WINNER, winner)
+    return TwoWayOutcome(TwoWayResultKind.UNDECIDED)

@@ -5,10 +5,17 @@ from dataclasses import replace
 from src.core.contest import Contest
 from src.core.shared.command_rejected import CommandRejected
 from src.core.contestant.models import IndividualPlayer, Team
-from src.sports.football.contest.commands import CommitFoul, ScoreGoal, StartMatch
+from src.sports.football.contest.commands import (
+    CommitFoul,
+    ScoreGoal,
+    StartMatch,
+    SubmitLineup,
+)
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.football_rule_set import FootballRuleSet
-from src.sports.football.contest.state import create_football_contest_state
+from src.sports.football.contest.football_contest_state import (
+    create_football_contest_state,
+)
 from src.core.contest import ContestFactory
 from src.sports.football.descriptor import FOOTBALL_SPORT
 
@@ -18,8 +25,18 @@ def _started_contest() -> Contest:
     away = Team("Away", "away")
     home.add_player(IndividualPlayer("P9", "p9"))
     away.add_player(IndividualPlayer("Other", "other"))
-    contest = ContestFactory.create(FOOTBALL_SPORT.id, [home, away], FootballMatchConfig())
+    contest = ContestFactory.create(
+        FOOTBALL_SPORT.id,
+        [home, away],
+        FootballMatchConfig(players_on_pitch=1, min_players_on_pitch=1),
+    )
     contest.handle(StartMatch())
+    contest.handle(
+        SubmitLineup(team_index=0, starting=("p9",), bench=()),
+    )
+    contest.handle(
+        SubmitLineup(team_index=1, starting=("other",), bench=()),
+    )
     return contest
 
 

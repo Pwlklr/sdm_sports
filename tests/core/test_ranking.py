@@ -1,7 +1,8 @@
 from src.core.contest.contest_result import RankedEntry
 from src.core.contestant.models import IndividualPlayer
 from src.core.tournament.ranking import (
-    describe_two_way_result,
+    TwoWayResultKind,
+    classify_two_way_result,
     head_to_head_points,
     is_ex_aequo_first,
     qualifiers_up_to_place,
@@ -39,13 +40,19 @@ def test_qualifiers_up_to_place() -> None:
     assert qualifiers_up_to_place(ranking, 2) == [players[0], players[1]]
 
 
-def test_describe_two_way_result() -> None:
+def test_classify_two_way_result() -> None:
     a, b = _player("A", "a"), _player("B", "b")
-    assert describe_two_way_result(()) == "zakonczony"
-    assert describe_two_way_result((RankedEntry(contestant=a, place=1),)) == "wygral A"
-    assert (
-        describe_two_way_result(
-            (RankedEntry(contestant=a, place=1), RankedEntry(contestant=b, place=1))
-        )
-        == "remis"
+
+    undecided = classify_two_way_result(())
+    assert undecided.kind is TwoWayResultKind.UNDECIDED
+    assert undecided.winner is None
+
+    decided = classify_two_way_result((RankedEntry(contestant=a, place=1),))
+    assert decided.kind is TwoWayResultKind.WINNER
+    assert decided.winner is a
+
+    draw = classify_two_way_result(
+        (RankedEntry(contestant=a, place=1), RankedEntry(contestant=b, place=1))
     )
+    assert draw.kind is TwoWayResultKind.DRAW
+    assert draw.winner is None

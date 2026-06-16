@@ -28,38 +28,38 @@ def build_darts_timeline(contest: Contest) -> list[str]:
     lines: list[str] = []
     for event in contest.history:
         if isinstance(event, MatchStarted):
-            lines.append("-- mecz rozpoczety")
+            lines.append("-- match started")
         elif isinstance(event, DartScored):
             name = _player_name(state, event.player_id)
             lines.append(
-                f"{name}: {event.sector} x{event.multiplier} = {event.points} pkt"
+                f"{name}: {event.sector} x{event.multiplier} = {event.points} pts"
             )
         elif isinstance(event, Busted):
             lines.append(f"{_player_name(state, event.player_id)}: BUST")
         elif isinstance(event, TurnEnded):
-            lines.append(f"-- koniec tury ({_player_name(state, event.player_id)})")
+            lines.append(f"-- end of turn ({_player_name(state, event.player_id)})")
         elif isinstance(event, LegWon):
-            lines.append(f"** leg dla {_player_name(state, event.player_id)}")
+            lines.append(f"** leg to {_player_name(state, event.player_id)}")
         elif isinstance(event, SetWon):
-            lines.append(f"*** set dla {_player_name(state, event.player_id)}")
+            lines.append(f"*** set to {_player_name(state, event.player_id)}")
         elif isinstance(event, LegStarted):
             lines.append(
-                f"-- nowy leg (rozpoczyna {_player_name(state, event.starting_player_id)})"
+                f"-- new leg (starts {_player_name(state, event.starting_player_id)})"
             )
         elif isinstance(event, MatchConcluded):
             lines.append(
-                f"== koniec meczu (wygrywa {_player_name(state, event.winner_id)})"
+                f"== match ended (winner: {_player_name(state, event.winner_id)})"
             )
         elif isinstance(event, EventReversed):
-            lines.append(f"   (wycofano zdarzenie - powod: {event.reason})")
+            lines.append(f"   (event reversed - reason: {event.reason})")
     return lines
 
 
 def print_darts_timeline(contest: Contest) -> None:
     lines = build_darts_timeline(contest)
-    print("\n--- PRZEBIEG MECZU ---")
+    print("\n--- MATCH TIMELINE ---")
     if not lines:
-        print("  (brak zdarzen)")
+        print("  (no events)")
     for line in lines:
         print(f"  {line}")
     print("----------------------")

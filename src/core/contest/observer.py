@@ -26,6 +26,11 @@ class Subject(ABC):
         if observer in self._observers:
             self._observers.remove(observer)
 
+    def detach_instances_of(self, observer_type: type[Observer]) -> None:
+        for observer in list(self._observers):
+            if isinstance(observer, observer_type):
+                self.detach(observer)
+
     def notify(self, fact: Optional[Event] = None) -> None:
         """Notifies all attached observers, optionally passing the triggering fact."""
         for observer in self._observers:

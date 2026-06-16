@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from src.core.contest.event import EventReversed
+from src.core.contest.event import Event, EventReversed
 from src.core.contest.reversal_chain import ReversalContext, ReversalHandler
 from src.core.shared.command_rejected import reject
 from src.sports.football.contest.commands import RevokeCaution, VarOverturnGoal
-from src.sports.football.contest.events import GoalScored, PlayerCautioned, PlayerDismissed
-from src.sports.football.contest.state import FootballContestState
+from src.sports.football.contest.events import (
+    GoalScored,
+    PlayerCautioned,
+    PlayerDismissed,
+)
+from src.sports.football.contest.football_contest_state import FootballContestState
 
 
-def _append_marker(ctx: ReversalContext, target_event_id: str, reason: str | None = None) -> None:
+def _append_marker(
+    ctx: ReversalContext, target_event_id: str, reason: str | None = None
+) -> None:
     if any(marker.target_event_id == target_event_id for marker in ctx.markers):
         return
     ctx.markers.append(
@@ -19,7 +25,7 @@ def _append_marker(ctx: ReversalContext, target_event_id: str, reason: str | Non
     )
 
 
-def _event_by_id(ctx: ReversalContext, event_id: str):
+def _event_by_id(ctx: ReversalContext, event_id: str) -> Event | None:
     for event in ctx.history:
         if event.event_id == event_id:
             return event
@@ -35,14 +41,14 @@ class FootballVarValidationHandler(ReversalHandler):
 
         state = ctx.state
         if not isinstance(state, FootballContestState):
-            reject("VAR jest dostepne tylko w meczu pilki noznej.")
+            reject("VAR is only available in a football match.")
 
         if state.is_finished:
-            reject("Mecz jest zakonczony - nie mozna zastosowac VAR.")
+            reject("Match is finished - VAR cannot be applied.")
 
         target = _event_by_id(ctx, ctx.command.target_event_id)
         if not isinstance(target, GoalScored):
-            reject("VAR moze anulowac wylacznie gol.")
+            reject("VAR can only overturn a goal.")
 
 
 class FootballDisciplinaryInvalidationHandler(ReversalHandler):
@@ -54,7 +60,7 @@ class FootballDisciplinaryInvalidationHandler(ReversalHandler):
 
         target = _event_by_id(ctx, ctx.command.target_event_id)
         if not isinstance(target, PlayerCautioned):
-            reject("Mozna wycofac wylacznie zolta kartke.")
+            reject("Only a yellow card can be revoked.")
 
         offender_id = target.offender_id
         caution_ids = {

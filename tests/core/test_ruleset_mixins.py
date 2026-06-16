@@ -6,7 +6,7 @@ import pytest
 
 from src.core.contest.command import Command
 from tests.core.contest_test_support import StatefulContestState
-from src.core.contest.event import Event
+from src.core.contest.event import Event, ProjectionEvent
 from src.core.contest.rule_set import RuleSet
 
 
@@ -21,7 +21,7 @@ class CmdB(Command):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FactA(Event):
+class FactA(ProjectionEvent):
     pass
 
 
@@ -32,15 +32,20 @@ class _State(StatefulContestState):
     def reset(self) -> _State:
         return _State(self.contestants)
 
+
 class MixinA:
-    def decide_a(self, command: CmdA, state: _State) -> list[Event]:
+    def decide_a(
+        self, command: CmdA, state: _State, history: list[Event]
+    ) -> list[Event]:
         return [FactA()]
 
     _own_command_handlers = {CmdA: decide_a}
 
 
 class MixinB:
-    def decide_b(self, command: CmdB, state: _State) -> list[Event]:
+    def decide_b(
+        self, command: CmdB, state: _State, history: list[Event]
+    ) -> list[Event]:
         return []
 
     _own_command_handlers = {CmdB: decide_b}
@@ -52,13 +57,15 @@ def test_handlers_merge_across_mixins() -> None:
 
     assert set(Composed.command_handlers) == {CmdA, CmdB}
     ruleset = Composed()
-    assert len(ruleset.decide(CmdA(), _State())) == 1
-    assert ruleset.decide(CmdB(), _State()) == []
+    assert len(ruleset.decide(CmdA(), _State(), [])) == 1
+    assert ruleset.decide(CmdB(), _State(), []) == []
 
 
 def test_conflicting_handlers_raise() -> None:
     class MixinC:
-        def decide_a_other(self, command: CmdA, state: _State) -> list[Event]:
+        def decide_a_other(
+            self, command: CmdA, state: _State, history: list[Event]
+        ) -> list[Event]:
             return []
 
         _own_command_handlers = {CmdA: decide_a_other}

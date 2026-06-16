@@ -1,16 +1,19 @@
+from __future__ import annotations
+
 import uuid
 from typing import Any, Dict, Iterable, List, Optional
 
 from src.core.contest import Contest
 from src.core.contest.command import Command
-from src.core.contest.contest_result import ContestOutcome, ContestResult
 from src.core.contestant.models import Contestant, IndividualPlayer, Team
 from src.core.sport.console_adapter import ConsoleAdapter
 from src.core.sport.registered_sport import RegisteredSport
 from src.core.sport.sport_descriptor import SportDescriptor
 from src.core.sport.sport_plugin import SportPlugin
 from src.core.tournament import Tournament
-from src.core.tournament.event import MatchScheduled
+from src.core.tournament.command import RecordMatchOutcome
+from src.core.tournament.event import FixtureScheduled
+from src.core.tournament.tournament_entry import TournamentEntry
 
 
 class SportsSystemEngine:
@@ -35,10 +38,10 @@ class SportsSystemEngine:
     def register_sport(
         self,
         descriptor: SportDescriptor,
-        adapter: ConsoleAdapter,
+        adapter: Optional[ConsoleAdapter] = None,
         match_metrics_reader: Any = None,
     ) -> None:
-        if adapter.descriptor != descriptor:
+        if adapter is not None and adapter.descriptor != descriptor:
             raise ValueError(
                 f"Adapter descriptor '{adapter.descriptor.id}' does not match "
                 f"registered sport '{descriptor.id}'."
@@ -79,7 +82,6 @@ class SportsSystemEngine:
         player_names: List[str],
         metadata: Optional[Dict[str, str]] = None,
     ) -> Team:
-        """Register a team whose squad lives on the roster, not in the global individuals pool."""
         team = self.create_team(name, metadata=metadata)
         for player_name in player_names:
             team.add_player(IndividualPlayer(player_name))
@@ -87,24 +89,31 @@ class SportsSystemEngine:
 
     def list_individual_players(self) -> List[IndividualPlayer]:
         return [
-            contestant
-            for contestant in self.global_players.values()
-            if isinstance(contestant, IndividualPlayer)
+            c for c in self.global_players.values() if isinstance(c, IndividualPlayer)
         ]
 
     def list_teams(self) -> List[Team]:
-        return [
-            contestant
-            for contestant in self.global_players.values()
-            if isinstance(contestant, Team)
-        ]
+        return [c for c in self.global_players.values() if isinstance(c, Team)]
 
     def create_tournament(
-        self, name: str, tournament_id: Optional[str] = None
+        self,
+        name: str,
+        sport_id: str,
+        blueprint_id: str,
+        *,
+        tournament_id: Optional[str] = None,
+        match_config: Any = None,
     ) -> Tournament:
-        t_id = tournament_id or str(uuid.uuid4())
-        tournament = Tournament(name, t_id)
+        tournament = Tournament.from_blueprint(
+            name,
+            sport_id,
+            blueprint_id,
+            tournament_id=tournament_id or str(uuid.uuid4()),
+            match_config=match_config,
+        )
         self.tournaments[tournament.id] = tournament
+        for contest_id, match in tournament.matches.items():
+            self.active_matches[contest_id] = match
         return tournament
 
     def register_active_match(self, match: Contest) -> None:
@@ -125,45 +134,53 @@ class SportsSystemEngine:
             raise ValueError(f"Match with ID '{match_id}' not found in active memory.")
         match.handle(command)
 
+    def suspend_match(self, match_id: str) -> None:
+        match = self.get_match(match_id)
+        if match is None:
+            raise ValueError(f"Match with ID '{match_id}' not found in active memory.")
+        match.suspend()
+
     def setup_tournament(
         self,
         tournament: Tournament,
-        sport_id: str,
-        config: Any,
-        contestants: List[Contestant],
-    ) -> List[MatchScheduled]:
+        entries: List[TournamentEntry],
+    ) -> List[FixtureScheduled]:
         tournament.open_registration()
-        for contestant in contestants:
-            tournament.register_player(contestant)
+        for entry in entries:
+            tournament.register_contestant(entry.contestant)
+            if entry.player_ids:
+                tournament.register_squad(entry.contestant.id, entry.player_ids)
+        events = tournament.close_registration()
+        for contest_id, match in tournament.matches.items():
+            self.active_matches[contest_id] = match
+        return [event for event in events if isinstance(event, FixtureScheduled)]
 
-        events = tournament.close_registration(sport_id, config)
-        return [event for event in events if isinstance(event, MatchScheduled)]
+    def sync_match_discipline(self, tournament: Tournament, match: Contest) -> None:
+        from src.sports.football.contest.football_contest_state import (
+            FootballContestState,
+        )
+
+        state = match.current_state
+        if isinstance(state, FootballContestState):
+            match.current_state = state.with_tournament_context(
+                suspended_player_ids=tournament.state.discipline.suspended_ids()
+            )
 
     def complete_tournament_match(self, tournament: Tournament, match_id: str) -> None:
         match = self.get_match(match_id)
         if match is None:
             raise ValueError(f"Match with ID '{match_id}' not found in active memory.")
-        tournament.complete_match(match)
-
-    def override_result(
-        self, match_id: str, result: ContestResult, reason: str
-    ) -> None:
-        """Set the official result outside the event log (walkover, commission, forfeit, etc.).
-
-        The played outcome stays on ``Contest.result.played``; ``Contest.result`` delegates
-        to the override for all official reads.
-        """
-        match = self.active_matches.get(match_id) or self.archived_matches.get(match_id)
-        if match is None:
-            raise ValueError(f"Match with ID '{match_id}' not found.")
-        match.result.apply_override(result, reason)
-
-    def award_walkover(
-        self, match_id: str, winner: Optional[Contestant], reason: str = "walkover"
-    ) -> None:
-        """Convenience wrapper: override with a minimal walkover/forfeit outcome."""
-        self.override_result(
-            match_id,
-            ContestOutcome(winner=winner, decided_by=reason),
-            reason=reason,
+        if not match.current_state.is_finished:
+            raise ValueError("Match is not completed.")
+        result = match.get_official_result()
+        events = tournament.handle(
+            RecordMatchOutcome(contest_id=match_id, result=result)
         )
+        for contest_id, contest in tournament.matches.items():
+            if contest_id not in self.active_matches:
+                self.active_matches[contest_id] = contest
+        for event in events:
+            if isinstance(event, FixtureScheduled):
+                created = tournament.get_match(event.contest_id)
+                if created is not None:
+                    self.active_matches[event.contest_id] = created

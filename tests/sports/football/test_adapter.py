@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from src.core.contestant.models import IndividualPlayer, Team
-from src.core.sport.match_setup import create_console_contest
+from src.console.match_setup import create_console_contest
 from src.sports.football.adapter import FootballConsoleAdapter
 from src.sports.football.contest.commands import (
     CommitFoul,
@@ -11,7 +11,7 @@ from src.sports.football.contest.commands import (
     TakePenaltyKick,
 )
 from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.contest.state import MatchPhase
+from src.sports.football.contest.football_contest_state import MatchPhase
 from src.sports.football.descriptor import FOOTBALL_SPORT
 
 

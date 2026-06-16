@@ -14,7 +14,7 @@ from src.sports.football.contest.events import (
     PlayerSubstituted,
 )
 from src.sports.football.contest.roster import player_name_for_id
-from src.sports.football.contest.state import FootballContestState
+from src.sports.football.contest.football_contest_state import FootballContestState
 
 
 def reversed_event_ids(contest: Contest) -> set[str]:
@@ -51,49 +51,49 @@ def build_match_timeline(contest: Contest) -> list[str]:
     lines: list[str] = []
     for event in contest.history:
         if isinstance(event, PeriodStarted):
-            lines.append(f"-- {event.kind.value} (okres {event.index + 1}) rozpoczety")
+            lines.append(f"-- {event.kind.value} (period {event.index + 1}) started")
         elif isinstance(event, GoalScored):
             label = (
-                "samobojczy" if event.own_goal else "karny" if event.penalty else "gol"
+                "own goal" if event.own_goal else "penalty" if event.penalty else "goal"
             )
             scorer = player_name_for_id(state, event.scorer_id)
             scorer_text = f" {scorer}" if scorer else ""
-            text = f"{event.minute}' GOL ({label}) {_team_name(state, event.team_id)}{scorer_text}"
+            text = f"{event.minute}' GOAL ({label}) {_team_name(state, event.team_id)}{scorer_text}"
             if event.event_id in disallowed:
-                text = f"[ANULOWANY] {text}"
+                text = f"[DISALLOWED] {text}"
             lines.append(text)
         elif isinstance(event, PlayerCautioned):
             lines.append(
-                f"{event.minute}' zolta kartka {player_name_for_id(state, event.offender_id)}"
+                f"{event.minute}' yellow card {player_name_for_id(state, event.offender_id)}"
             )
         elif isinstance(event, PlayerDismissed):
             lines.append(
-                f"{event.minute}' czerwona kartka {player_name_for_id(state, event.offender_id)}"
+                f"{event.minute}' red card {player_name_for_id(state, event.offender_id)}"
             )
         elif isinstance(event, PlayerSubstituted):
             out_name = player_name_for_id(state, event.player_out)
             in_name = player_name_for_id(state, event.player_in)
-            lines.append(f"{event.minute}' zmiana: {out_name} -> {in_name}")
+            lines.append(f"{event.minute}' sub: {out_name} -> {in_name}")
         elif isinstance(event, PeriodEnded):
-            lines.append(f"-- koniec okresu ({event.kind.value})")
+            lines.append(f"-- period ended ({event.kind.value})")
         elif isinstance(event, PenaltyShootoutStarted):
-            lines.append("-- seria rzutow karnych")
+            lines.append("-- penalty shootout")
         elif isinstance(event, PenaltyKickTaken):
-            outcome = "trafiony" if event.scored else "obroniony/niecelny"
-            lines.append(f"   karny {_team_name(state, event.team_id)}: {outcome}")
+            outcome = "scored" if event.scored else "saved/missed"
+            lines.append(f"   penalty {_team_name(state, event.team_id)}: {outcome}")
         elif isinstance(event, MatchConcluded):
             via = event.decided_by.replace("_", " ")
-            lines.append(f"== koniec meczu ({via})")
+            lines.append(f"== match ended ({via})")
         elif isinstance(event, EventReversed):
-            lines.append(f"   (VAR) wycofano zdarzenie - powod: {event.reason}")
+            lines.append(f"   (VAR) event reversed - reason: {event.reason}")
     return lines
 
 
 def print_match_timeline(contest: Contest) -> None:
     lines = build_match_timeline(contest)
-    print("\n--- PRZEBIEG MECZU ---")
+    print("\n--- MATCH TIMELINE ---")
     if not lines:
-        print("  (brak zdarzen)")
+        print("  (no events)")
     for line in lines:
         print(f"  {line}")
     print("----------------------")

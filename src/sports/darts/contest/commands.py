@@ -24,3 +24,18 @@ class CallOcheFault(Command):
 @dataclass(frozen=True, kw_only=True)
 class RevokeDartThrow(ReverseDecision):
     pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class AwardWalkover(Command):
+    winner_id: str
+    reason: str = "walkover"
+
+
+__all__ = [
+    "AwardWalkover",
+    "CallOcheFault",
+    "RevokeDartThrow",
+    "StartMatch",
+    "ThrowDart",
+]

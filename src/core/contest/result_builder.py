@@ -1,13 +1,29 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from abc import ABC, abstractmethod
 
-if TYPE_CHECKING:
-    from src.core.contest.contest_result import ContestResult
-    from src.core.contest.contest_state import ContestState
+from src.core.contest.contest_result import ContestResult
+from src.core.contest.contest_state import ContestState
+from src.core.contest.event import Event, OfficialOverrideEvent
 
 
-class ResultBuilder(Protocol):
-    """Builds a sport-specific ContestResult snapshot from the current projection."""
+class ResultBuilder(ABC):
+    """Builds a sport-specific ContestResult from the current projection and event history.
 
-    def build(self, state: ContestState) -> ContestResult: ...
+    Builders receive both the current state projection *and* the full event history.
+    This lets them read concluding events (e.g. MatchConcluded) directly from the log
+    rather than relying on result-metadata fields being cached in the state.
+    """
+
+    @abstractmethod
+    def build(self, state: ContestState, history: list[Event]) -> ContestResult:
+        pass
+
+    @abstractmethod
+    def build_official(
+        self,
+        state: ContestState,
+        history: list[Event],
+        override: OfficialOverrideEvent,
+    ) -> ContestResult:
+        pass

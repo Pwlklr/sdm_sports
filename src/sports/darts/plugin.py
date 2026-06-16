@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import src.sports.darts.register_contest  # noqa: F401 — rejestracja w ContestFactory
+import src.sports.darts.register_contest  # noqa: F401 — ContestFactory registration
+import src.sports.darts.register_tournament  # noqa: F401 — tournament profile registration
 
 from src.core.sport.sport_plugin import SportPlugin
 from src.sports.darts.adapter import DartsConsoleAdapter

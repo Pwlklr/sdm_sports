@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.core.contest.event import EventReversed
+from src.core.contest.event import Event, EventReversed
 from src.core.contest.reversal_chain import ReversalContext, ReversalHandler
 from src.sports.darts.contest.commands import RevokeDartThrow
 from src.sports.darts.contest.events import DartScored, LegStarted, LegWon
@@ -17,7 +17,7 @@ def _append_marker(ctx: ReversalContext, target_event_id: str) -> None:
     )
 
 
-def _event_by_id(ctx: ReversalContext, event_id: str):
+def _event_by_id(ctx: ReversalContext, event_id: str) -> Event | None:
     for event in ctx.history:
         if event.event_id == event_id:
             return event
@@ -36,7 +36,9 @@ class DartsLegIntegrityHandler(ReversalHandler):
             return
 
         target_index = next(
-            i for i, event in enumerate(ctx.history) if event.event_id == target.event_id
+            i
+            for i, event in enumerate(ctx.history)
+            if event.event_id == target.event_id
         )
 
         for index, event in enumerate(ctx.history):
@@ -56,6 +58,4 @@ def build_darts_reversal_chain() -> ReversalHandler:
         ValidateTargetExistsHandler,
     )
 
-    return ValidateTargetExistsHandler(
-        DartsLegIntegrityHandler(RecordTargetHandler())
-    )
+    return ValidateTargetExistsHandler(DartsLegIntegrityHandler(RecordTargetHandler()))

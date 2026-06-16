@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.core.contest import Contest
 from src.core.contest.command import ReverseDecision
-from src.core.console.reversal_catalog import ReversalOption, build_numbered_catalog
+from src.console.reversal_catalog import ReversalOption, build_numbered_catalog
 from src.core.contest.event import Event
 from src.sports.football.contest.commands import RevokeCaution, VarOverturnGoal
 from src.sports.football.contest.events import (
@@ -13,7 +13,7 @@ from src.sports.football.contest.events import (
     PlayerSubstituted,
 )
 from src.sports.football.contest.roster import player_name_for_id
-from src.sports.football.contest.state import FootballContestState
+from src.sports.football.contest.football_contest_state import FootballContestState
 
 _REVERSIBLE_TYPES = (
     GoalScored,
@@ -31,29 +31,27 @@ def _team_name(state: FootballContestState, team_id: str) -> str:
 
 def _label_event(state: FootballContestState, event: Event) -> str:
     if isinstance(event, GoalScored):
-        kind = "samoboj" if event.own_goal else "karny" if event.penalty else "gol"
+        kind = "own goal" if event.own_goal else "penalty" if event.penalty else "goal"
         scorer = player_name_for_id(state, event.scorer_id)
         scorer_text = f" {scorer}" if scorer else ""
-        return (
-            f"{event.minute}' {kind} {_team_name(state, event.team_id)}{scorer_text}"
-        )
+        return f"{event.minute}' {kind} {_team_name(state, event.team_id)}{scorer_text}"
     if isinstance(event, PlayerCautioned):
         return (
-            f"{event.minute}' zolta kartka "
+            f"{event.minute}' yellow card "
             f"{player_name_for_id(state, event.offender_id)}"
         )
     if isinstance(event, PlayerDismissed):
         return (
-            f"{event.minute}' czerwona kartka "
+            f"{event.minute}' red card "
             f"{player_name_for_id(state, event.offender_id)}"
         )
     if isinstance(event, PlayerSubstituted):
         out_name = player_name_for_id(state, event.player_out)
         in_name = player_name_for_id(state, event.player_in)
-        return f"{event.minute}' zmiana {out_name} -> {in_name}"
+        return f"{event.minute}' sub {out_name} -> {in_name}"
     if isinstance(event, PenaltyKickTaken):
-        outcome = "trafiony" if event.scored else "pudlo"
-        return f"karny seria {_team_name(state, event.team_id)}: {outcome}"
+        outcome = "scored" if event.scored else "missed"
+        return f"shootout penalty {_team_name(state, event.team_id)}: {outcome}"
     return type(event).__name__
 
 

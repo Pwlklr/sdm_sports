@@ -30,3 +30,11 @@ def test_disciplinary_record_accumulates() -> None:
     record = record.with_yellow("p1")
     record = record.with_yellow("p1")
     assert record.yellows_for("p1") == 2
+
+
+def test_team_str_and_id() -> None:
+    from src.core.contestant.models import Team
+
+    team = Team(name="Real Madrid", contestant_id="team_1")
+    assert str(team) == "Real Madrid"
+    assert team.id == "team_1"

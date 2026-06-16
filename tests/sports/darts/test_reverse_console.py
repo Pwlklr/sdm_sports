@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.core.contestant.models import IndividualPlayer
-from src.core.sport.match_setup import create_console_contest
+from src.console.match_setup import create_console_contest
 from src.sports.darts.adapter import DartsConsoleAdapter
 from src.sports.darts.contest.commands import RevokeDartThrow, StartMatch, ThrowDart
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig
@@ -11,9 +11,7 @@ from src.sports.darts.descriptor import DARTS_SPORT
 def _match():
     players = [IndividualPlayer("A", "a"), IndividualPlayer("B", "b")]
     adapter = DartsConsoleAdapter()
-    match = create_console_contest(
-        DARTS_SPORT.id, adapter, players, DartsMatchConfig()
-    )
+    match = create_console_contest(DARTS_SPORT.id, adapter, players, DartsMatchConfig())
     match.handle(StartMatch())
     return match, adapter
 

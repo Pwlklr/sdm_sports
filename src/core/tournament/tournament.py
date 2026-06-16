@@ -1,147 +1,245 @@
 from __future__ import annotations
 
-from typing import Any, List, Optional
+import uuid
+from collections.abc import Iterable
+from dataclasses import replace
+from typing import Any
 
 from src.core.contest.contest import Contest
-from src.core.contest.contest_factory import ContestFactory
 from src.core.contestant.models import Contestant
-from src.core.tournament.tournament_disciplinary_board import (
-    TournamentDisciplinaryBoard,
+from src.core.tournament.blueprint import TournamentBlueprint
+from src.core.tournament.blueprint_factory import TournamentBlueprintFactory
+from src.core.tournament.command import (
+    CloseRegistration,
+    OpenRegistration,
+    RegisterContestantRef,
+    RegisterSquad,
+    TournamentCommand,
 )
 from src.core.tournament.event import (
-    MatchCompleted,
     TournamentEvent,
+    TournamentProjectionEvent,
 )
-from src.core.tournament.phase import GroupStagePhase, TournamentPhase
+from src.core.tournament.sport_tournament_profile import SportTournamentProfile
+from src.core.tournament.sport_tournament_registry import SportTournamentRegistry
 from src.core.tournament.tournament_policy import (
     DefaultTournamentPolicy,
     TournamentPolicy,
 )
-from src.core.tournament.tournament_registration import TournamentRegistration
-from src.core.tournament.tournament_scheduler import TournamentScheduler
 from src.core.tournament.tournament_state import DefaultTournamentState
 
 
+class ContestMatchProvider:
+    def __init__(self, sport_id: str, registry: dict[str, Contest]) -> None:
+        self._sport_id = sport_id
+        self._registry = registry
+
+    def create(
+        self,
+        sides: list[Contestant],
+        *,
+        match_config: Any,
+        contest_id: str | None = None,
+        suspended_player_ids: frozenset[str] | None = None,
+        eligible_squads: dict[str, frozenset[str]] | None = None,
+    ) -> Contest:
+        from src.core.contest.contest_factory import ContestFactory
+
+        options: dict[str, Any] = {}
+        if suspended_player_ids:
+            options["suspended_player_ids"] = suspended_player_ids
+        if eligible_squads:
+            options["eligible_squads"] = eligible_squads
+        contest = ContestFactory.create(
+            self._sport_id,
+            sides,
+            match_config,
+            contest_id=contest_id,
+            **options,
+        )
+        self._registry[contest.id] = contest
+        return contest
+
+
 class Tournament:
-    """
-    Aggregate root for a complete competition.
-    Processes tournament events and coordinates phases, registration, and scheduling.
-    """
+    """Event-sourced aggregate root for a competition."""
 
     def __init__(
         self,
         name: str,
         tournament_id: str,
-        registration: TournamentRegistration | None = None,
-        scheduler: TournamentScheduler | None = None,
-        disciplinary_board: TournamentDisciplinaryBoard | None = None,
+        sport_id: str,
+        blueprint: TournamentBlueprint,
+        *,
         policy: TournamentPolicy | None = None,
+        profile: SportTournamentProfile | None = None,
+        state: DefaultTournamentState | None = None,
+        match_registry: dict[str, Contest] | None = None,
     ) -> None:
         self.id = tournament_id
         self.name = name
-        self.contestants: List[Contestant] = []
-        self.phases: List[TournamentPhase] = []
-        self.state = DefaultTournamentState()
-
-        self.registration = registration or TournamentRegistration()
-        self.scheduler = scheduler or TournamentScheduler()
-        self.disciplinary_board = disciplinary_board or TournamentDisciplinaryBoard()
-        self.policy = policy or DefaultTournamentPolicy()
+        self._sport_id = sport_id
+        self._blueprint = blueprint
+        self._policy = policy or DefaultTournamentPolicy()
+        self._profile = profile or SportTournamentRegistry.get(sport_id)
+        self._match_registry = match_registry if match_registry is not None else {}
+        self._match_provider = ContestMatchProvider(sport_id, self._match_registry)
+        self._contestant_registry: dict[str, Contestant] = {}
+        phases = self._policy.build_phases(blueprint)
+        self._state = state or DefaultTournamentState(
+            sport_id=sport_id,
+            blueprint_id=blueprint.id,
+            phases=phases,
+        )
         self._history: list[TournamentEvent] = []
+
+    @classmethod
+    def from_blueprint(
+        cls,
+        name: str,
+        sport_id: str,
+        blueprint_id: str,
+        *,
+        tournament_id: str | None = None,
+        match_config: Any = None,
+    ) -> Tournament:
+        blueprint = TournamentBlueprintFactory.get(blueprint_id)
+        if match_config is not None:
+            from src.core.tournament.blueprint import PhaseDefinition
+
+            phases = tuple(
+                PhaseDefinition(
+                    id=p.id,
+                    name=p.name,
+                    format=p.format,
+                    scheduling_mode=p.scheduling_mode,
+                    match_config=match_config,
+                    qualification=p.qualification,
+                    requires=p.requires,
+                    group_count=p.group_count,
+                )
+                for p in blueprint.phases
+            )
+            blueprint = replace(blueprint, phases=phases)
+        return cls(
+            name,
+            tournament_id or str(uuid.uuid4()),
+            sport_id,
+            blueprint,
+        )
+
+    @classmethod
+    def from_events(
+        cls,
+        name: str,
+        sport_id: str,
+        blueprint: TournamentBlueprint,
+        events: Iterable[TournamentEvent],
+        *,
+        tournament_id: str | None = None,
+        profile: SportTournamentProfile | None = None,
+    ) -> Tournament:
+        tournament = cls(
+            name,
+            tournament_id or str(uuid.uuid4()),
+            sport_id,
+            blueprint,
+            profile=profile,
+        )
+        tournament._history = list(events)
+        tournament._rebuild_state()
+        return tournament
 
     @property
     def history(self) -> list[TournamentEvent]:
         return self._history.copy()
 
     @property
-    def current_phase_idx(self) -> int:
-        return self.state.current_phase_index
+    def state(self) -> DefaultTournamentState:
+        return self._state
 
     @property
     def is_completed(self) -> bool:
-        return self.state.is_complete
+        return self._state.is_complete
 
     @property
-    def current_phase(self) -> Optional[TournamentPhase]:
-        if not self.phases:
-            return None
-        if self.current_phase_idx < len(self.phases):
-            return self.phases[self.current_phase_idx]
-        return None
+    def matches(self) -> dict[str, Contest]:
+        return dict(self._match_registry)
 
-    def add_phase(self, phase: TournamentPhase) -> None:
-        self.phases.append(phase)
-        self.state.phase_count = len(self.phases)
+    def get_match(self, contest_id: str) -> Contest | None:
+        return self._match_registry.get(contest_id)
 
-    def register_contestant(self, contestant: Contestant) -> None:
-        if contestant not in self.contestants:
-            self.contestants.append(contestant)
+    def register_match(self, match: Contest) -> None:
+        """Inject an externally-created contest into the tournament match registry."""
+        self._match_registry[match.id] = match
 
-    def handle(self, event: TournamentEvent) -> list[TournamentEvent]:
-        self._history.append(event)
-        emitted = self.policy.handle(event, self)
-        self._history.extend(emitted)
-        return emitted
+    def register_contestant(self, contestant: Contestant) -> list[TournamentEvent]:
+        self._contestant_registry[contestant.id] = contestant
+        return self.handle(RegisterContestantRef(contestant=contestant))
 
-    def schedule_phase_fixtures(
-        self,
-        sport_id: str,
-        config: Any,
-        contestants: list[Contestant] | None = None,
+    def register_squad(
+        self, contestant_id: str, player_ids: tuple[str, ...]
     ) -> list[TournamentEvent]:
-        phase = self.current_phase
-        if phase is None:
-            return []
-
-        pool = contestants if contestants is not None else self.contestants
-        if isinstance(phase, GroupStagePhase):
-            phase.initialize_standings(pool)
-
-        emitted: list[TournamentEvent] = []
-        for side_a, side_b in phase.get_matchups(pool):
-            match = ContestFactory.create(sport_id, [side_a, side_b], config)
-            phase.add_contest(match)
-            emitted.extend(self.scheduler.schedule_match(match))
-        return emitted
+        return self.handle(
+            RegisterSquad(contestant_id=contestant_id, player_ids=player_ids)
+        )
 
     def open_registration(self) -> list[TournamentEvent]:
+        return self.handle(OpenRegistration())
+
+    def close_registration(self) -> list[TournamentEvent]:
+        events = self.handle(CloseRegistration())
+        return events
+
+    def handle(self, command: TournamentCommand) -> list[TournamentEvent]:
         emitted: list[TournamentEvent] = []
-        for event in self.registration.open_registration():
-            emitted.extend(self.handle(event))
+        queue: list[TournamentEvent] = list(
+            self._policy.decide(
+                command,
+                self._state,
+                self._history,
+                blueprint=self._blueprint,
+                profile=self._profile,
+                match_provider=self._match_provider,
+                contestant_registry=self._contestant_registry,
+            )
+        )
+        while queue:
+            fact = queue.pop(0)
+            emitted.extend(self._record_event(fact))
+            if isinstance(fact, TournamentProjectionEvent):
+                for reaction in self._policy.react(
+                    fact,
+                    self._state,
+                    blueprint=self._blueprint,
+                    profile=self._profile,
+                    match_provider=self._match_provider,
+                    contestant_registry=self._contestant_registry,
+                ):
+                    queue.append(reaction)
         return emitted
 
-    def register_player(self, contestant: Contestant) -> list[TournamentEvent]:
-        events = self.registration.register(contestant)
-        emitted: list[TournamentEvent] = []
-        for event in events:
-            emitted.extend(self.handle(event))
-        return emitted
+    def _record_event(self, fact: TournamentEvent) -> list[TournamentEvent]:
+        if isinstance(fact, TournamentProjectionEvent):
+            self._state = self._state.apply(fact)
+        self._history.append(fact)
+        return [fact]
 
-    def close_registration(
-        self,
-        sport_id: str,
-        config: Any,
-    ) -> list[TournamentEvent]:
-        events = self.registration.close_registration()
-        emitted: list[TournamentEvent] = []
-        for event in events:
-            emitted.extend(self.handle(event))
+    def _rebuild_state(self) -> None:
+        self._state = DefaultTournamentState(
+            sport_id=self._sport_id,
+            blueprint_id=self._blueprint.id,
+            phases=self._policy.build_phases(self._blueprint),
+        )
+        for event in self._history:
+            if isinstance(event, TournamentProjectionEvent):
+                self._state = self._state.apply(event)
 
-        schedule_events = self.schedule_phase_fixtures(sport_id, config)
-        for scheduled in schedule_events:
-            self.handle(scheduled)
-            emitted.append(scheduled)
-        return emitted
+    def active_phase_id(self) -> str | None:
+        return self._state.active_phase_id
 
-    def complete_match(self, match: Contest) -> list[TournamentEvent]:
-        return self.handle(MatchCompleted(match, match.result))
-
-    def advance_to_next_phase(self) -> None:
-        self.state.advance_phase()
-
-    def advance_phase(self) -> None:
-        phase = self.current_phase
-        if phase:
-            phase.check_completion()
-            if phase.is_completed:
-                self.advance_to_next_phase()
+    def pending_match_ids(self) -> list[str]:
+        ps = self._state.active_phase_state()
+        if ps is None:
+            return []
+        return sorted(ps.pending_fixture_contest_ids())

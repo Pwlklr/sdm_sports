@@ -1,15 +1,22 @@
 from dataclasses import replace
 
 from src.core.contestant.models import IndividualPlayer, Team
+from src.sports.football.contest.commands import SubmitLineup
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.player_stats import FootballPlayerStats
 from src.sports.football.contest.roster_status import (
-    format_player_card_suffix,
-    format_squad_lines_from_state,
     roster_status_for_match,
     roster_status_for_team,
 )
-from src.sports.football.contest.state import FootballContestState, create_football_contest_state
+from src.sports.football.console.roster_view import (
+    format_pitch_and_bench_lines_from_state,
+    format_player_card_suffix,
+    format_squad_lines_from_state,
+)
+from src.sports.football.contest.football_contest_state import (
+    FootballContestState,
+    create_football_contest_state,
+)
 
 
 def _state() -> FootballContestState:
@@ -63,3 +70,28 @@ def test_format_squad_lines_from_state_shows_cards() -> None:
     lines = format_squad_lines_from_state(state, home)
     assert any("🟨" in line for line in lines)
     assert any("🟥" in line for line in lines)
+
+
+def test_format_pitch_and_bench_lines_splits_lineup() -> None:
+    state = _state()
+    home = state.teams[0]
+    lines = format_pitch_and_bench_lines_from_state(state, home)
+    assert any("lineup not submitted" in line for line in lines)
+
+    from src.core.contest import ContestFactory
+    from src.sports.football.descriptor import FOOTBALL_SPORT
+    from src.sports.football.contest.commands import StartMatch
+
+    match = ContestFactory.create(
+        FOOTBALL_SPORT.id,
+        [home, state.teams[1]],
+        FootballMatchConfig(players_on_pitch=1, min_players_on_pitch=1),
+    )
+    match.handle(StartMatch())
+    match.handle(SubmitLineup(team_index=0, starting=("saka",), bench=("ode",)))
+    state = match.current_state
+    lines = format_pitch_and_bench_lines_from_state(state, home)
+    assert any("On pitch:" in line for line in lines)
+    assert any("Saka" in line for line in lines)
+    assert any("Bench:" in line for line in lines)
+    assert any("Ode" in line for line in lines)

@@ -23,7 +23,7 @@ from src.sports.darts.contest.player_stats import DartsPlayerStats
 
 
 @dataclass(frozen=True, kw_only=True)
-class DartsContestState:
+class DartsContestState(ContestState):
     players: tuple[IndividualPlayer, ...]
     config: DartsMatchConfig
     scores: dict[str, int] = field(default_factory=dict)
@@ -176,7 +176,11 @@ def _apply_leg_started(state: DartsContestState, fact: Event) -> DartsContestSta
 
 def _apply_match_concluded(state: DartsContestState, fact: Event) -> DartsContestState:
     assert isinstance(fact, MatchConcluded)
-    return replace(state, winner_id=fact.winner_id, is_finished=True)
+    return replace(
+        state,
+        winner_id=fact.winner_id,
+        is_finished=True,
+    )
 
 
 DartsContestState._appliers = {
@@ -191,22 +195,25 @@ DartsContestState._appliers = {
 }
 
 
+def _require_individual_player(player: Contestant) -> IndividualPlayer:
+    if not isinstance(player, IndividualPlayer):
+        raise ValueError("Darts matches require IndividualPlayer contestants.")
+    return player
+
+
 def create_darts_contest_state(
     players: list[Contestant],
     config: DartsMatchConfig,
 ) -> DartsContestState:
     if not players:
         raise ValueError("A match requires at least one contestant.")
-    for player in players:
-        if not isinstance(player, IndividualPlayer):
-            raise ValueError("Darts matches require IndividualPlayer contestants.")
-    typed = tuple(players)
+    typed: tuple[IndividualPlayer, ...] = tuple(
+        _require_individual_player(player) for player in players
+    )
     return DartsContestState(
         players=typed,
         config=config,
         scores={p.id: config.starting_score for p in typed},
-        contestant_stats={
-            p.id: DartsPlayerStats(contestant_id=p.id) for p in typed
-        },
+        contestant_stats={p.id: DartsPlayerStats(contestant_id=p.id) for p in typed},
         turn_starting_score=config.starting_score,
     )

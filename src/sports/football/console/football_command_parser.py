@@ -13,13 +13,18 @@ from src.sports.football.contest.commands import (
 )
 from src.sports.football.contest.roster import (
     match_clock_limit,
+    resolve_roster_player_by_number,
+)
+from src.sports.football.console.roster_parser import (
     parse_console_minute,
     parse_console_player_number,
     parse_console_team_number,
-    resolve_roster_player_by_number,
 )
-from src.sports.football.contest.roster_status import print_roster_report
-from src.sports.football.contest.state import FootballContestState, MatchPhase
+from src.sports.football.console.roster_view import print_roster_report
+from src.sports.football.contest.football_contest_state import (
+    FootballContestState,
+    MatchPhase,
+)
 
 
 def parse_football_command(

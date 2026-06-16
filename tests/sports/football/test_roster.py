@@ -4,22 +4,17 @@ from src.sports.football.contest.football_match_config import FootballMatchConfi
 
 from src.sports.football.contest.player_stats import FootballPlayerStats
 
+from src.sports.football.console.roster_parser import parse_console_team_number
 from src.sports.football.contest.roster import (
-
-    parse_console_team_number,
-
     player_on_team,
-
     resolve_roster_player_by_number,
-
 )
 
 from src.sports.football.contest.roster_status import team_disciplinary_summary
 
-from src.sports.football.contest.state import create_football_contest_state
-
-
-
+from src.sports.football.contest.football_contest_state import (
+    create_football_contest_state,
+)
 
 
 def _team() -> Team:
@@ -33,9 +28,6 @@ def _team() -> Team:
     return team
 
 
-
-
-
 def test_parse_console_team_number() -> None:
 
     assert parse_console_team_number("1", 2) == 0
@@ -43,9 +35,6 @@ def test_parse_console_team_number() -> None:
     assert parse_console_team_number("2", 2) == 1
 
     assert parse_console_team_number("3", 2) is None
-
-
-
 
 
 def test_resolve_roster_player_by_number() -> None:
@@ -57,9 +46,6 @@ def test_resolve_roster_player_by_number() -> None:
     assert player.name == "Saka"
 
 
-
-
-
 def test_player_on_team() -> None:
 
     team = _team()
@@ -67,9 +53,6 @@ def test_player_on_team() -> None:
     assert player_on_team(team, "player-saka-001")
 
     assert not player_on_team(team, "unknown")
-
-
-
 
 
 def test_team_disciplinary_summary_counts_players() -> None:
@@ -83,28 +66,19 @@ def test_team_disciplinary_summary_counts_players() -> None:
     stats = dict(state.player_stats)
 
     stats["player-saka-001"] = FootballPlayerStats(
-
         player_id="player-saka-001", yellow_cards=1
-
     )
 
     stats["player-odegaard-2"] = FootballPlayerStats(
-
         player_id="player-odegaard-2", dismissed=True
-
     )
 
     from dataclasses import replace
 
-
-
     state = replace(state, player_stats=stats)
-
-
 
     yellows, sent_off = team_disciplinary_summary(team, state)
 
     assert yellows == 1
 
     assert sent_off == 1
-

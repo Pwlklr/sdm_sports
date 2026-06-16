@@ -1,94 +1,54 @@
-from __future__ import annotations
+"""Pure-core event reversal mechanics.
 
-import pytest
+Sport-specific reversal tests live in tests/sports/football/test_reversal.py
+and tests/sports/darts/test_reversal.py.  This file covers only behaviour that
+is independent of any particular sport implementation.
+"""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 
 from src.core.contest.command import Command, ReverseDecision
-from src.core.contest.contest_state import ContestState
-from src.core.contest.event import Event, EventReversed
-from src.core.contest.result import Result
+from src.core.contest.event import Event
 from src.core.contest.rule_set import RuleSet
-from src.core.contestant.models import IndividualPlayer, Team
-from src.core.contest import ContestFactory
-from src.sports.darts.contest.commands import RevokeDartThrow, StartMatch as DartsStart, ThrowDart
-from src.sports.darts.contest.darts_match_config import DartsMatchConfig
-from src.sports.darts.contest.events import DartScored
-from src.sports.darts.descriptor import DARTS_SPORT
-from src.sports.football.contest.commands import ScoreGoal, StartMatch, VarOverturnGoal
-from src.sports.football.contest.events import GoalScored
-from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.descriptor import FOOTBALL_SPORT
 from tests.core.contest_test_support import StatefulContestState, make_contest
 
 
-def _two_team_match() -> object:
-    home = Team("Home", "home")
-    away = Team("Away", "away")
-    home.add_player(IndividualPlayer("P9", "p9"))
-    away.add_player(IndividualPlayer("Other", "other"))
-    match = ContestFactory.create(FOOTBALL_SPORT.id, [home, away], FootballMatchConfig())
-    match.handle(StartMatch())
-    return match
+class _S(StatefulContestState):
+    def apply(self, fact: Event) -> _S:
+        return _S(self.contestants)
+
+    def reset(self) -> _S:
+        return _S(self.contestants)
 
 
-def test_reversing_a_goal_recomputes_score() -> None:
-    match = _two_team_match()
-    match.handle(ScoreGoal(team_index=0, minute=10))
-    match.handle(ScoreGoal(team_index=0, minute=20))
-    goal = next(e for e in match.history if isinstance(e, GoalScored))
-
-    match.handle(VarOverturnGoal(target_event_id=goal.event_id, reason="offside"))
-
-    assert match.current_state.scores["home"] == 1
-    assert any(isinstance(e, EventReversed) for e in match.history)
-    assert sum(isinstance(e, GoalScored) for e in match.history) == 2
+@dataclass(frozen=True, kw_only=True)
+class _Noop(Command):
+    pass
 
 
-def test_reverse_decision_requires_known_event() -> None:
-    match = _two_team_match()
-    with pytest.raises(ValueError):
-        match.handle(ReverseDecision(target_event_id="does-not-exist"))
+class _R(RuleSet):
+    def decide_noop(
+        self, command: _Noop, state: _S, history: list[Event]
+    ) -> list[Event]:
+        return []
+
+    command_handlers = {_Noop: decide_noop}
+    reaction_handlers = {}
 
 
 def test_reverse_decision_rebuilds_via_state_reset() -> None:
-    @dataclass(frozen=True, kw_only=True)
-    class Noop(Command):
+    """After reversing any event the contest state is rebuilt by replaying survivors."""
+    contest = make_contest(_S([]), _R())
+    # Inject a minimal event and then reverse it via the public API
+    from dataclasses import dataclass as _dc
+
+    @_dc(frozen=True, kw_only=True)
+    class _Fact(Event):
         pass
 
-    class S(StatefulContestState):
-        def apply(self, fact: Event) -> S:
-            return S(self.contestants)
-
-        def reset(self) -> S:
-            return S(self.contestants)
-
-    class R(RuleSet):
-        def decide_noop(self, command: Noop, state: S) -> list[Event]:
-            return []
-
-        command_handlers = {Noop: decide_noop}
-        reaction_handlers = {}
-
-    @dataclass(frozen=True, kw_only=True)
-    class DummyFact(Event):
-        pass
-
-    contest = make_contest(S([]), R())
-    contest._record_event(DummyFact(event_id="x"))
+    contest._record_event(_Fact(event_id="x"))
     contest.handle(ReverseDecision(target_event_id="x", reason="test"))
-    assert isinstance(contest.current_state, S)
-
-
-def test_reversal_drops_causal_descendants() -> None:
-    players = [IndividualPlayer("A", "a"), IndividualPlayer("B", "b")]
-    match = ContestFactory.create(DARTS_SPORT.id, players, DartsMatchConfig())
-    match.handle(DartsStart())
-    match.handle(ThrowDart(sector=20, multiplier=3))
-    first_dart = next(e for e in match.history if isinstance(e, DartScored))
-    score_after = match.current_state.scores["a"]
-
-    match.handle(RevokeDartThrow(target_event_id=first_dart.event_id, reason="correction"))
-
-    assert match.current_state.scores["a"] == match.current_state.config.starting_score
-    assert score_after < match.current_state.config.starting_score
+    # State is rebuilt from the surviving (empty) event set — still an _S instance
+    assert isinstance(contest.current_state, _S)

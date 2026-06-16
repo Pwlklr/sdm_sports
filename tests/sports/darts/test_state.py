@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.contestant import IndividualPlayer
+from src.core.contestant import IndividualPlayer, Team
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig
 from src.sports.darts.contest.events import MatchStarted
 from src.sports.darts.contest.darts_contest_state import create_darts_contest_state
@@ -9,6 +9,15 @@ from src.sports.darts.contest.darts_contest_state import create_darts_contest_st
 def test_state_requires_players() -> None:
     with pytest.raises(ValueError):
         create_darts_contest_state([], DartsMatchConfig())
+
+
+def test_rejects_team_contestants() -> None:
+    home = Team("Home", "home")
+    away = Team("Away", "away")
+    with pytest.raises(
+        ValueError, match="Darts matches require IndividualPlayer contestants."
+    ):
+        create_darts_contest_state([home, away], DartsMatchConfig())
 
 
 def test_apply_match_started() -> None:

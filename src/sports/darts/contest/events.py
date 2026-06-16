@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.core.contest.event import Event
+from src.core.contest.event import OfficialOverrideEvent, ProjectionEvent
 
 
 @dataclass(frozen=True, kw_only=True)
-class DartsEvent(Event):
+class DartsEvent(ProjectionEvent):
     pass
 
 
@@ -51,3 +51,10 @@ class LegStarted(DartsEvent):
 @dataclass(frozen=True, kw_only=True)
 class MatchConcluded(DartsEvent):
     winner_id: str
+    decided_by: str = "regulation"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContestResultOverridden(OfficialOverrideEvent):
+    winner_id: str
+    reason: str

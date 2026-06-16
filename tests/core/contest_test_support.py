@@ -1,62 +1,113 @@
 from __future__ import annotations
 
+
 from dataclasses import dataclass
 
+
 from src.core.contest import Contest
-from src.core.contest.contest_result import ContestResult, EmptySideMetrics, RankedEntry
+
+
+from src.core.contest.contest_result import ContestResult, RankedEntry
+
 from src.core.contest.contest_state import ContestState
-from src.core.contest.event import Event
+
+from src.core.contest.event import Event, OfficialOverrideEvent
+
 from src.core.contest.metrics import SideMetrics
+
 from src.core.contest.result_builder import ResultBuilder
+
 from src.core.contest.rule_set import RuleSet
+
 from src.core.contestant.models import Contestant
 
 
 @dataclass(frozen=True, kw_only=True)
+class EmptySideMetrics:
+    """Minimal side metrics for test stubs."""
+
+
+@dataclass(frozen=True, kw_only=True)
 class EmptyContestResult(ContestResult):
+
     def is_finished(self) -> bool:
+
         return False
 
     def ranking(self) -> tuple[RankedEntry, ...]:
+
         return ()
 
     def side_metrics(self) -> SideMetrics:
+
         return EmptySideMetrics()
 
 
 EmptyResult = EmptyContestResult
 
 
-class StubResultBuilder:
-    def build(self, state: ContestState) -> ContestResult:
+@dataclass(frozen=True, kw_only=True)
+class MockOfficialOverride(OfficialOverrideEvent):
+
+    reason: str = "test_override"
+
+
+class StubResultBuilder(ResultBuilder):
+
+    def build(self, state: ContestState, history: list[Event]) -> ContestResult:
+
         return EmptyContestResult()
 
+    def build_official(
+        self,
+        state: ContestState,
+        history: list[Event],
+        override: OfficialOverrideEvent,
+    ) -> ContestResult:
 
-class StatefulContestState:
+        return self.build(state, history)
+
+
+class StatefulContestState(ContestState):
+
     def __init__(self, contestants: list[Contestant] | None = None) -> None:
+
         self._contestants = list(contestants or [])
+
         self._finished = False
 
     @property
     def is_finished(self) -> bool:
+
         return self._finished
 
     @property
+    def match_started(self) -> bool:
+
+        return False
+
+    @property
     def contestants(self) -> list[Contestant]:
+
         return list(self._contestants)
 
     def apply(self, fact: Event) -> StatefulContestState:
+
         return self
 
     def reset(self) -> StatefulContestState:
+
         return StatefulContestState(self.contestants)
 
 
 class MinimalContestState(StatefulContestState):
+
     def apply(self, fact: Event) -> MinimalContestState:
+
         return MinimalContestState(self.contestants)
 
     def reset(self) -> MinimalContestState:
+
         return MinimalContestState(self.contestants)
 
 
@@ -67,6 +118,7 @@ def make_contest(
     result_builder: ResultBuilder | None = None,
     contest_id: str | None = None,
 ) -> Contest:
+
     return Contest(
         state,
         ruleset,

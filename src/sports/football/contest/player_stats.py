@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.core.contest.contestant_stats import ContestantStats
+from src.core.contestant.models import Team
+
 
 @dataclass(frozen=True, kw_only=True)
-class FootballPlayerStats:
+class FootballPlayerStats(ContestantStats):
     player_id: str
     goals: int = 0
-    assists: int = 0
     yellow_cards: int = 0
     dismissed: bool = False
 
@@ -19,7 +21,14 @@ class FootballPlayerStats:
         return FootballPlayerStats(
             player_id=self.player_id,
             goals=self.goals + 1,
-            assists=self.assists,
+            yellow_cards=self.yellow_cards,
+            dismissed=self.dismissed,
+        )
+
+    def with_goal_removed(self) -> FootballPlayerStats:
+        return FootballPlayerStats(
+            player_id=self.player_id,
+            goals=max(self.goals - 1, 0),
             yellow_cards=self.yellow_cards,
             dismissed=self.dismissed,
         )
@@ -28,7 +37,6 @@ class FootballPlayerStats:
         return FootballPlayerStats(
             player_id=self.player_id,
             goals=self.goals,
-            assists=self.assists,
             yellow_cards=self.yellow_cards + 1,
             dismissed=self.dismissed,
         )
@@ -37,14 +45,13 @@ class FootballPlayerStats:
         return FootballPlayerStats(
             player_id=self.player_id,
             goals=self.goals,
-            assists=self.assists,
             yellow_cards=self.yellow_cards,
             dismissed=True,
         )
 
 
 def init_player_stats_for_teams(
-    teams: tuple,
+    teams: tuple[Team, Team],
 ) -> dict[str, FootballPlayerStats]:
     stats: dict[str, FootballPlayerStats] = {}
     for team in teams:
