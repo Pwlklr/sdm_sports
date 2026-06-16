@@ -2,16 +2,14 @@ import pytest
 
 from src.core.contestant.models import IndividualPlayer, Team
 from src.core.shared.command_rejected import CommandRejected
-from src.core.tournament.tournament_disciplinary_board import (
-    TournamentDisciplinaryBoard,
-)
+from src.core.tournament.tournament_state import DisciplineState
+from src.sports.football.register_tournament import FootballDisciplineCarryover
 from src.sports.football.contest.commands import (
     CommitFoul,
     StartMatch,
     SubmitLineup,
     SubstitutePlayer,
 )
-from src.sports.football.contest.discipline_carryover import accrue_suspensions
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.core.contest import ContestFactory
 from src.sports.football.descriptor import FOOTBALL_SPORT
@@ -126,34 +124,35 @@ def test_red_card_carries_over_as_suspension() -> None:
     match.handle(CommitFoul(team_index=0, minute=30, card="red", offender_id="h1"))
     from dataclasses import replace
 
+    from src.sports.football.register_tournament import FootballPhaseOutcomeInterpreter
     from src.sports.football.contest.football_result_builder import FootballResultBuilder
 
     state = replace(match.current_state, is_finished=True)
     result = FootballResultBuilder(config=FootballMatchConfig()).build(state)
-    board = TournamentDisciplinaryBoard()
-    accrue_suspensions(board, result)
-    assert board.is_suspended("h1")
-    assert "h1" in board.suspended_ids()
+    snapshot = FootballPhaseOutcomeInterpreter().interpret(match.id, result)
+    carryover = FootballDisciplineCarryover()
+    discipline = DisciplineState()
+    suspensions = carryover.carryover(snapshot, discipline)
+    assert ("h1", 1) in suspensions
 
 
 def test_accumulated_yellows_trigger_suspension() -> None:
     from dataclasses import replace
 
+    from src.sports.football.register_tournament import FootballPhaseOutcomeInterpreter
     from src.sports.football.contest.football_result_builder import FootballResultBuilder
+    from src.sports.football.contest.player_stats import FootballPlayerStats
 
-    board = TournamentDisciplinaryBoard()
+    carryover = FootballDisciplineCarryover()
+    interpreter = FootballPhaseOutcomeInterpreter()
     builder = FootballResultBuilder(config=FootballMatchConfig())
+    discipline = DisciplineState()
 
-    match1 = _match()
-    match1.handle(CommitFoul(team_index=0, minute=10, card="yellow", offender_id="h1"))
-    accrue_suspensions(
-        board, builder.build(replace(match1.current_state, is_finished=True))
-    )
-    assert not board.is_suspended("h1")
-
-    match2 = _match()
-    match2.handle(CommitFoul(team_index=0, minute=10, card="yellow", offender_id="h1"))
-    accrue_suspensions(
-        board, builder.build(replace(match2.current_state, is_finished=True))
-    )
-    assert board.is_suspended("h1")
+    match = _match()
+    state = replace(match.current_state, is_finished=True)
+    stats = dict(state.player_stats)
+    stats["h1"] = FootballPlayerStats(player_id="h1", yellow_cards=2)
+    state = replace(state, player_stats=stats)
+    snap = interpreter.interpret(match.id, builder.build(state))
+    suspensions = carryover.carryover(snap, discipline)
+    assert ("h1", 1) in suspensions

@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 from src.core.contest import Contest
 from src.core.contest.event import EventReversed
-from src.sports.football.contest.state import FootballContestState
+from src.sports.football.contest.football_contest_state import FootballContestState
 from src.sports.football.contest.events import (
     PeriodStarted, GoalScored, PlayerCautioned, PlayerDismissed,
     PlayerSubstituted, PeriodEnded, PenaltyShootoutStarted,

@@ -8,7 +8,7 @@ from src.sports.football.contest.football_match_config import FootballMatchConfi
 from src.sports.football.contest.football_reversal import build_football_reversal_chain
 from src.sports.football.contest.football_result_builder import FootballResultBuilder
 from src.sports.football.contest.football_rule_set import FootballRuleSet
-from src.sports.football.contest.state import create_football_contest_state
+from src.sports.football.contest.football_contest_state import create_football_contest_state
 from src.sports.football.descriptor import FOOTBALL_SPORT
 
 

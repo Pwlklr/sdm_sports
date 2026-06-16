@@ -11,7 +11,7 @@ from src.sports.football.contest.commands import (
     TakePenaltyKick,
 )
 from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.contest.state import MatchPhase
+from src.sports.football.contest.football_contest_state import MatchPhase
 from src.sports.football.descriptor import FOOTBALL_SPORT
 
 

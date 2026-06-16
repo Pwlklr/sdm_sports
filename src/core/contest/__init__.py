@@ -6,11 +6,7 @@ from src.core.contest.contest_factory import ContestAssembly, ContestFactory
 
 from src.core.contest.contest_result import (
 
-    ContestOutcome,
-
     ContestResult,
-
-    OfficialResultView,
 
     RankedEntry,
 
@@ -20,7 +16,13 @@ from src.core.contest.contest_state import ContestState
 
 from src.core.contest.contestant_stats import ContestantStats
 
-from src.core.contest.event import ContestEvent, Event, EventReversed
+from src.core.contest.event import (
+    ContestEvent,
+    Event,
+    EventReversed,
+    OfficialOverrideEvent,
+    ProjectionEvent,
+)
 
 from src.core.contest.match_metrics_reader import MatchMetricsReader
 
@@ -50,8 +52,6 @@ __all__ = [
 
     "ContestFactory",
 
-    "ContestOutcome",
-
     "ContestResult",
 
     "ContestState",
@@ -68,7 +68,9 @@ __all__ = [
 
     "Observer",
 
-    "OfficialResultView",
+    "OfficialOverrideEvent",
+
+    "ProjectionEvent",
 
     "RankedEntry",
 
@@ -85,5 +87,4 @@ __all__ = [
     "Subject",
 
 ]
-
 

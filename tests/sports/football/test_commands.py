@@ -10,7 +10,7 @@ from src.sports.football.contest.commands import (
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.core.contest import ContestFactory
 from src.sports.football.descriptor import FOOTBALL_SPORT
-from src.sports.football.contest.state import MatchPhase
+from src.sports.football.contest.football_contest_state import MatchPhase
 
 
 def _contest() -> Contest:

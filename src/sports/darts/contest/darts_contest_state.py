@@ -23,7 +23,7 @@ from src.sports.darts.contest.player_stats import DartsPlayerStats
 
 
 @dataclass(frozen=True, kw_only=True)
-class DartsContestState:
+class DartsContestState(ContestState):
     players: tuple[IndividualPlayer, ...]
     config: DartsMatchConfig
     scores: dict[str, int] = field(default_factory=dict)
@@ -35,6 +35,7 @@ class DartsContestState:
     match_started: bool = False
     is_finished: bool = False
     winner_id: Optional[str] = None
+    decided_by: str = "regulation"
 
     _appliers: ClassVar[
         dict[type[Event], Callable[["DartsContestState", Event], DartsContestState]]
@@ -176,7 +177,12 @@ def _apply_leg_started(state: DartsContestState, fact: Event) -> DartsContestSta
 
 def _apply_match_concluded(state: DartsContestState, fact: Event) -> DartsContestState:
     assert isinstance(fact, MatchConcluded)
-    return replace(state, winner_id=fact.winner_id, is_finished=True)
+    return replace(
+        state,
+        winner_id=fact.winner_id,
+        is_finished=True,
+        decided_by=fact.decided_by,
+    )
 
 
 DartsContestState._appliers = {

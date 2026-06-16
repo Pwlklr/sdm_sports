@@ -1,4 +1,4 @@
-from src.sports.darts.contest.commands import CallOcheFault, StartMatch, ThrowDart
+from src.sports.darts.contest.commands import AwardWalkover, CallOcheFault, StartMatch, ThrowDart
 from src.sports.darts.contest.darts_match_config import DartsMatchConfig
 from src.sports.darts.contest.entities import DartThrow, DartTurn
 from src.sports.darts.contest.events import (
@@ -16,6 +16,7 @@ from src.sports.darts.contest.darts_rule_set import DartsRuleSet
 from src.sports.darts.contest.darts_contest_state import DartsContestState
 
 __all__ = [
+    "AwardWalkover",
     "Busted",
     "CallOcheFault",
     "DartScored",

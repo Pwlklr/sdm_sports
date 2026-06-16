@@ -2,11 +2,11 @@ import pytest
 
 from dataclasses import replace
 
-from src.core.contestant import Team
+from src.core.contestant import IndividualPlayer, Team
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.entities import PeriodKind
 from src.sports.football.contest.events import MatchStarted, PeriodStarted
-from src.sports.football.contest.state import create_football_contest_state
+from src.sports.football.contest.football_contest_state import create_football_contest_state
 
 
 def _state():
@@ -18,6 +18,13 @@ def _state():
 def test_requires_two_sides() -> None:
     with pytest.raises(ValueError):
         create_football_contest_state([Team("Solo", "solo")], FootballMatchConfig())
+
+
+def test_rejects_individual_players_as_sides() -> None:
+    p1 = IndividualPlayer("P1", "p1")
+    p2 = IndividualPlayer("P2", "p2")
+    with pytest.raises(ValueError, match="Football matches require Team contestants."):
+        create_football_contest_state([p1, p2], FootballMatchConfig())
 
 
 def test_opponent_resolution() -> None:

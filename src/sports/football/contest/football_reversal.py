@@ -5,7 +5,7 @@ from src.core.contest.reversal_chain import ReversalContext, ReversalHandler
 from src.core.shared.command_rejected import reject
 from src.sports.football.contest.commands import RevokeCaution, VarOverturnGoal
 from src.sports.football.contest.events import GoalScored, PlayerCautioned, PlayerDismissed
-from src.sports.football.contest.state import FootballContestState
+from src.sports.football.contest.football_contest_state import FootballContestState
 
 
 def _append_marker(ctx: ReversalContext, target_event_id: str, reason: str | None = None) -> None:

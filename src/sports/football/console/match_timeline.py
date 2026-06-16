@@ -14,7 +14,7 @@ from src.sports.football.contest.events import (
     PlayerSubstituted,
 )
 from src.sports.football.contest.roster import player_name_for_id
-from src.sports.football.contest.state import FootballContestState
+from src.sports.football.contest.football_contest_state import FootballContestState
 
 
 def reversed_event_ids(contest: Contest) -> set[str]:

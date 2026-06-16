@@ -20,7 +20,7 @@ from src.sports.football.console.reversal_catalog import (
 from src.sports.football.contest.commands import StartMatch
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.roster import format_team_header
-from src.sports.football.contest.state import FootballContestState, MatchPhase
+from src.sports.football.contest.football_contest_state import FootballContestState, MatchPhase
 from src.sports.football.descriptor import FOOTBALL_SPORT
 
 

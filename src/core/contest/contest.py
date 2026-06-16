@@ -9,11 +9,11 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, List
 
 from src.core.contest.command import Command, ReverseDecision
-from src.core.contest.contest_result import ContestResult, OfficialResultView
+from src.core.contest.contest_result import ContestResult
 from src.core.contest.contest_state import ContestState
 from src.core.contest.result_builder import ResultBuilder
 from src.core.contest.rule_set import RuleSet
-from src.core.contest.event import Event, EventReversed
+from src.core.contest.event import Event, EventReversed, OfficialOverrideEvent, ProjectionEvent
 from src.core.contest.observer import Subject
 
 if TYPE_CHECKING:
@@ -35,7 +35,6 @@ class Contest(Subject):
         self.current_state = state
         self._ruleset = ruleset
         self._result_builder = result_builder
-        self.result = OfficialResultView()
         self._history: list[Event] = []
 
     @property
@@ -63,17 +62,22 @@ class Contest(Subject):
 
     def active_domain_events(self) -> list[Event]:
         """Domain facts currently affecting the projection (reversal candidates)."""
-        return self._effective_domain_events()
+        return self._effective_base_events()
 
-    def get_final_result(self) -> ContestResult:
+    def get_played_result(self) -> ContestResult:
         if not self.current_state.is_finished:
             raise ValueError("Match is not completed.")
-        if self.result.played is None:
-            self.result.record_played(self._result_builder.build(self.current_state))
-        final = self.result.effective_result
-        if final is None:
-            raise ValueError("Match is completed but no result is available.")
-        return final
+        return self._result_builder.build(self.current_state)
+
+    def get_official_result(self) -> ContestResult:
+        if not self.current_state.is_finished:
+            raise ValueError("Match is not completed.")
+        walkovers = self._effective_walkover_events()
+        if not walkovers:
+            return self._result_builder.build(self.current_state)
+        return self._result_builder.build_official(
+            self.current_state, walkovers[-1]
+        )
 
     def handle(self, command: Command) -> list[Event]:
         if isinstance(command, ReverseDecision):
@@ -82,7 +86,9 @@ class Contest(Subject):
 
     def _handle_domain_command(self, command: Command) -> list[Event]:
         emitted: list[Event] = []
-        queue: list[Event] = list(self._ruleset.decide(command, self.current_state))
+        queue: list[Event] = list(
+            self._ruleset.decide(command, self.current_state, self._history)
+        )
 
         while queue:
             fact = queue.pop(0)
@@ -104,22 +110,26 @@ class Contest(Subject):
         return markers
 
     def _record_event(self, fact: Event) -> None:
+        if isinstance(fact, OfficialOverrideEvent):
+            self._record_audit_event(fact)
+            return
         self.current_state = self.current_state.apply(fact)
         self._history.append(fact)
         self.notify(fact)
-        self._refresh_result()
+
+    def _record_audit_event(self, fact: Event) -> None:
+        self._history.append(fact)
+        self.notify(fact)
 
     def _record_meta_event(self, fact: Event) -> None:
         self._history.append(fact)
         self.notify(fact)
 
     def _rebuild_state(self) -> None:
-        """Replay the effective event log onto a fresh projection."""
+        """Replay the effective projection log onto a fresh state."""
         self.current_state = self.current_state.reset()
-        self.result.reset_played()
-        for event in self._effective_domain_events():
+        for event in self._effective_base_events():
             self.current_state = self.current_state.apply(event)
-            self._refresh_result()
         self.notify(None)
 
     def _get_withdrawn_event_ids(self) -> set[str]:
@@ -137,7 +147,7 @@ class Contest(Subject):
                     changed = True
         return withdrawn
 
-    def _effective_domain_events(self) -> list[Event]:
+    def _effective_events(self) -> list[Event]:
         withdrawn = self._get_withdrawn_event_ids()
         return [
             event
@@ -145,8 +155,16 @@ class Contest(Subject):
             if not isinstance(event, EventReversed) and event.event_id not in withdrawn
         ]
 
-    def _refresh_result(self) -> None:
-        if self.current_state.is_finished and self.result.played is None:
-            self.result.record_played(
-                self._result_builder.build(self.current_state)
-            )
+    def _effective_base_events(self) -> list[Event]:
+        return [
+            event
+            for event in self._effective_events()
+            if isinstance(event, ProjectionEvent)
+        ]
+
+    def _effective_walkover_events(self) -> list[Event]:
+        return [
+            event
+            for event in self._effective_events()
+            if isinstance(event, OfficialOverrideEvent)
+        ]

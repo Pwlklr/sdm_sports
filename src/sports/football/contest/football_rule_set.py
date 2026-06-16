@@ -3,12 +3,14 @@ from __future__ import annotations
 from typing import ClassVar
 
 from src.core.contest.command import Command
-from src.core.contest.event import Event
+from src.core.contest.event import Event, EventReversed
 from src.core.contestant.models import Contestant, Team
 from src.core.contest.rule_set import Handler, RuleSet
 from src.core.shared.command_rejected import reject
 from src.sports.football.contest.commands import (
+    AwardWalkover,
     CommitFoul,
+    CorrectGoalScorer,
     EndPeriod,
     ScoreGoal,
     StartMatch,
@@ -18,8 +20,10 @@ from src.sports.football.contest.commands import (
 )
 from src.sports.football.contest.entities import PeriodKind
 from src.sports.football.contest.events import (
+    ContestResultOverridden,
     ExtraTimeStarted,
     GoalScored,
+    GoalScorerCorrected,
     LineupSubmitted,
     MatchConcluded,
     MatchStarted,
@@ -37,14 +41,14 @@ from src.sports.football.contest.roster import (
     player_name_for_id,
     player_on_team,
 )
-from src.sports.football.contest.state import FootballContestState, MatchPhase
+from src.sports.football.contest.football_contest_state import FootballContestState, MatchPhase
 
 
 class FootballCoreRules:
     """Invariant football rules: kickoff, scoring, period progression."""
 
     def decide_start_match(
-        self, command: StartMatch, state: FootballContestState
+        self, command: StartMatch, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
             reject("Mecz jest juz zakonczony.")
@@ -56,7 +60,7 @@ class FootballCoreRules:
         ]
 
     def decide_score_goal(
-        self, command: ScoreGoal, state: FootballContestState
+        self, command: ScoreGoal, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna strzelic gola.")
@@ -87,7 +91,7 @@ class FootballCoreRules:
         ]
 
     def decide_end_period(
-        self, command: EndPeriod, state: FootballContestState
+        self, command: EndPeriod, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
             reject("Mecz jest zakonczony.")
@@ -137,7 +141,7 @@ class FootballDisciplineRules:
     """Cards and dismissals."""
 
     def decide_commit_foul(
-        self, command: CommitFoul, state: FootballContestState
+        self, command: CommitFoul, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna zglosic przewinienia.")
@@ -223,7 +227,7 @@ class FootballKnockoutRules:
     """Extra time, golden goal and penalty shootout."""
 
     def decide_take_penalty_kick(
-        self, command: TakePenaltyKick, state: FootballContestState
+        self, command: TakePenaltyKick, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
             reject("Mecz jest zakonczony.")
@@ -275,7 +279,7 @@ class FootballSquadRules:
     """Lineups, bench and substitutions, including tournament suspension checks."""
 
     def decide_submit_lineup(
-        self, command: SubmitLineup, state: FootballContestState
+        self, command: SubmitLineup, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna zglosic skladu.")
@@ -319,7 +323,7 @@ class FootballSquadRules:
         ]
 
     def decide_substitute_player(
-        self, command: SubstitutePlayer, state: FootballContestState
+        self, command: SubstitutePlayer, state: FootballContestState, history: list[Event]
     ) -> list[Event]:
         if state.is_finished:
             reject("Mecz jest zakonczony - nie mozna dokonac zmiany.")
@@ -355,11 +359,79 @@ class FootballSquadRules:
     }
 
 
+class FootballAdminRules:
+    """Post-match corrections and administrative walkover / result override."""
+
+    def decide_award_walkover(
+        self, command: AwardWalkover, state: FootballContestState, history: list[Event]
+    ) -> list[Event]:
+        winner = state.team_by_id(command.winner_id)
+        if winner is None:
+            reject("Nieprawidlowa druzyna zwycieska.")
+
+        if state.match_started and not state.is_finished:
+            reject("Mecz trwa - walkover administracyjny niedostepny w trakcie gry.")
+
+        if not state.is_finished:
+            return [
+                MatchConcluded(
+                    winner_id=winner.id,
+                    draw=False,
+                    decided_by=command.reason,
+                )
+            ]
+
+        return [
+            ContestResultOverridden(
+                winner_id=winner.id,
+                reason=command.reason,
+                winner_score=command.winner_score,
+                loser_score=command.loser_score,
+            )
+        ]
+
+    def decide_correct_goal_scorer(
+        self, command: CorrectGoalScorer, state: FootballContestState, history: list[Event]
+    ) -> list[Event]:
+        if not state.is_finished:
+            reject("Mecz nie jest zakonczony - korekta strzelca niedostepna.")
+
+        target = _active_goal_scored(history, command.goal_event_id)
+        if target is None:
+            reject("Nie znaleziono aktywnego gola do korekty.")
+
+        team = state.team_by_id(target.team_id)
+        if team is None:
+            reject("Nieprawidlowa druzyna w evencie gola.")
+        if not player_on_team(team, command.new_scorer_id):
+            reject("Nowy strzelec nie nalezy do druzyny strzelajacej gola.")
+
+        previous = target.scorer_id or ""
+        if previous == command.new_scorer_id:
+            reject("Strzelec jest juz poprawnie przypisany.")
+
+        return [
+            GoalScorerCorrected(
+                goal_event_id=command.goal_event_id,
+                team_id=target.team_id,
+                minute=target.minute,
+                previous_scorer_id=previous,
+                new_scorer_id=command.new_scorer_id,
+            )
+        ]
+
+    _own_command_handlers: ClassVar[dict[type[Command], Handler]] = {
+        AwardWalkover: decide_award_walkover,
+        CorrectGoalScorer: decide_correct_goal_scorer,
+    }
+
+
 class FootballRuleSet(
     FootballCoreRules,
     FootballDisciplineRules,
     FootballKnockoutRules,
     FootballSquadRules,
+    FootballAdminRules,
     RuleSet,
 ):
     def __init__(
@@ -373,6 +445,31 @@ class FootballRuleSet(
 
 def _valid_minute(minute: int, state: FootballContestState) -> bool:
     return 0 <= minute <= match_clock_limit(state)
+
+
+def _withdrawn_event_ids(history: list[Event]) -> set[str]:
+    withdrawn: set[str] = {
+        event.target_event_id
+        for event in history
+        if isinstance(event, EventReversed)
+    }
+    changed = True
+    while changed:
+        changed = False
+        for event in history:
+            if event.caused_by in withdrawn and event.event_id not in withdrawn:
+                withdrawn.add(event.event_id)
+                changed = True
+    return withdrawn
+
+
+def _active_goal_scored(history: list[Event], goal_event_id: str) -> GoalScored | None:
+    withdrawn = _withdrawn_event_ids(history)
+    for event in history:
+        if isinstance(event, GoalScored) and event.event_id == goal_event_id:
+            if event.event_id not in withdrawn:
+                return event
+    return None
 
 
 def _after_regulation(state: FootballContestState) -> list[Event]:

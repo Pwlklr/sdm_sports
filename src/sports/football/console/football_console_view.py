@@ -9,7 +9,7 @@ from src.sports.football.contest.roster_status import (
     format_squad_lines_from_state,
     team_disciplinary_summary,
 )
-from src.sports.football.contest.state import FootballContestState, MatchPhase
+from src.sports.football.contest.football_contest_state import FootballContestState, MatchPhase
 
 
 class FootballConsoleView(Observer):

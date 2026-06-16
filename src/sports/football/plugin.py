@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import src.sports.football.register_contest  # noqa: F401 — rejestracja w ContestFactory
+import src.sports.football.register_tournament  # noqa: F401 — rejestracja profilu turniejowego
 
 from src.core.sport.sport_plugin import SportPlugin
 from src.sports.football.adapter import FootballConsoleAdapter

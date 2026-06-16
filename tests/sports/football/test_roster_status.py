@@ -9,7 +9,7 @@ from src.sports.football.contest.roster_status import (
     roster_status_for_match,
     roster_status_for_team,
 )
-from src.sports.football.contest.state import FootballContestState, create_football_contest_state
+from src.sports.football.contest.football_contest_state import FootballContestState, create_football_contest_state
 
 
 def _state() -> FootballContestState:

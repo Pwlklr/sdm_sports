@@ -1,10 +1,12 @@
+from src.core.contest.contest_state import ContestState
 from src.core.contest.reversal_chain import ReversalContext
-from src.sports.darts.contest.darts_reversal import DartsLegIntegrityHandler
-from src.sports.darts.contest.commands import RevokeDartThrow
-from src.sports.darts.contest.events import DartScored, LegWon, LegStarted
 from src.core.contest.event import Event
+from src.sports.darts.contest.commands import RevokeDartThrow
+from src.sports.darts.contest.darts_reversal import DartsLegIntegrityHandler
+from src.sports.darts.contest.events import DartScored, LegStarted, LegWon
 
-class DummyContestState:
+
+class DummyContestState(ContestState):
     """A minimal mock state to satisfy ReversalContext requirements."""
     @property
     def is_finished(self) -> bool: return False

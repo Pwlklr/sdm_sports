@@ -64,7 +64,9 @@ def test_reverse_decision_rebuilds_via_state_reset() -> None:
             return S(self.contestants)
 
     class R(RuleSet):
-        def decide_noop(self, command: Noop, state: S) -> list[Event]:
+        def decide_noop(
+            self, command: Noop, state: S, history: list[Event]
+        ) -> list[Event]:
             return []
 
         command_handlers = {Noop: decide_noop}

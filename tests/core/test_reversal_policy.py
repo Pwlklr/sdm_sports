@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.core.contest.command import Command
-from src.core.contest.event import Event, EventReversed
+from src.core.contest.event import Event, EventReversed, ProjectionEvent
 from src.core.contest.rule_set import RuleSet
 from tests.core.contest_test_support import MinimalContestState, make_contest
 
 
 @dataclass(frozen=True, kw_only=True)
-class Fact(Event):
+class Fact(ProjectionEvent):
     pass
 
 
@@ -19,7 +19,9 @@ class Noop(Command):
 
 
 class _RuleSet(RuleSet):
-    def decide_noop(self, command: Noop, state: MinimalContestState) -> list[Event]:
+    def decide_noop(
+        self, command: Noop, state: MinimalContestState, history: list[Event]
+    ) -> list[Event]:
         return []
 
     command_handlers = {Noop: decide_noop}
@@ -48,7 +50,7 @@ def test_withdrawn_event_ids_includes_caused_by_descendants() -> None:
     assert contest._get_withdrawn_event_ids() == {"p", "c", "g"}
 
 
-def test_effective_domain_events_skips_markers_and_withdrawn() -> None:
+def test_effective_base_events_skips_markers_and_withdrawn() -> None:
     kept = Fact(event_id="kept")
     removed = Fact(event_id="removed")
     contest = _contest_with_history(
@@ -59,4 +61,4 @@ def test_effective_domain_events_skips_markers_and_withdrawn() -> None:
         ]
     )
 
-    assert contest._effective_domain_events() == [kept]
+    assert contest._effective_base_events() == [kept]

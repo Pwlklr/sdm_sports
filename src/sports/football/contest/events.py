@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.core.contest.event import Event
+from src.core.contest.event import OfficialOverrideEvent, ProjectionEvent
 from src.sports.football.contest.entities import PeriodKind
 
 
 @dataclass(frozen=True, kw_only=True)
-class FootballEvent(Event):
+class FootballEvent(ProjectionEvent):
     pass
 
 
@@ -86,3 +86,20 @@ class PlayerSubstituted(FootballEvent):
     player_out: str
     player_in: str
     minute: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalScorerCorrected(FootballEvent):
+    goal_event_id: str
+    team_id: str
+    minute: int
+    previous_scorer_id: str
+    new_scorer_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContestResultOverridden(OfficialOverrideEvent):
+    winner_id: str
+    reason: str
+    winner_score: int = 3
+    loser_score: int = 0

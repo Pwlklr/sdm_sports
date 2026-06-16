@@ -5,9 +5,12 @@ from src.sports.football.contest.football_match_config import FootballMatchConfi
 from src.sports.football.contest.commands import (
     StartMatch, ScoreGoal, EndPeriod, CommitFoul, TakePenaltyKick, SubmitLineup, SubstitutePlayer
 )
-from src.sports.football.contest.state import MatchPhase
+from src.sports.football.contest.football_contest_state import MatchPhase
 from src.sports.football.contestant.football_team import FootballTeam
 from src.core.contestant.models import IndividualPlayer
+
+_HISTORY: list = []
+
 
 def test_core_rules_rejections() -> None:
     ruleset = FootballRuleSet(FootballMatchConfig())
@@ -15,40 +18,40 @@ def test_core_rules_rejections() -> None:
     
     state.is_finished = True
     with pytest.raises(Exception, match="Mecz jest juz zakonczony"):
-        ruleset.decide_start_match(StartMatch(), state)
+        ruleset.decide_start_match(StartMatch(), state, _HISTORY)
         
     state.is_finished = False
     state.match_started = True
     with pytest.raises(Exception, match="Mecz zostal juz rozpoczety"):
-        ruleset.decide_start_match(StartMatch(), state)
+        ruleset.decide_start_match(StartMatch(), state, _HISTORY)
 
     state.is_finished = True
     with pytest.raises(Exception, match="nie mozna strzelic gola"):
-        ruleset.decide_score_goal(ScoreGoal(team_index=0, minute=10), state)
+        ruleset.decide_score_goal(ScoreGoal(team_index=0, minute=10), state, _HISTORY)
         
     state.is_finished = False
     state.phase = MatchPhase.PENALTIES
     with pytest.raises(Exception, match="Trwa seria rzutow karnych"):
-        ruleset.decide_score_goal(ScoreGoal(team_index=0, minute=10), state)
+        ruleset.decide_score_goal(ScoreGoal(team_index=0, minute=10), state, _HISTORY)
         
     state.phase = MatchPhase.REGULATION
     state.current_period = None
     with pytest.raises(Exception, match="Brak aktywnego okresu gry"):
-        ruleset.decide_score_goal(ScoreGoal(team_index=0, minute=10), state)
+        ruleset.decide_score_goal(ScoreGoal(team_index=0, minute=10), state, _HISTORY)
 
     state.is_finished = True
     with pytest.raises(Exception, match="Mecz jest zakonczony"):
-        ruleset.decide_end_period(EndPeriod(), state)
+        ruleset.decide_end_period(EndPeriod(), state, _HISTORY)
         
     state.is_finished = False
     state.phase = MatchPhase.PENALTIES
     with pytest.raises(Exception, match="Trwa seria rzutow karnych"):
-        ruleset.decide_end_period(EndPeriod(), state)
+        ruleset.decide_end_period(EndPeriod(), state, _HISTORY)
         
     state.phase = MatchPhase.REGULATION
     state.current_period = None
     with pytest.raises(Exception, match="Brak aktywnego okresu do zakonczenia"):
-        ruleset.decide_end_period(EndPeriod(), state)
+        ruleset.decide_end_period(EndPeriod(), state, _HISTORY)
 
 def test_discipline_rules_rejections() -> None:
     ruleset = FootballRuleSet(FootballMatchConfig())
@@ -56,12 +59,12 @@ def test_discipline_rules_rejections() -> None:
     
     state.is_finished = True
     with pytest.raises(Exception, match="nie mozna zglosic przewinienia"):
-        ruleset.decide_commit_foul(CommitFoul(team_index=0, offender_id="p1", minute=10, card="yellow"), state)
+        ruleset.decide_commit_foul(CommitFoul(team_index=0, offender_id="p1", minute=10, card="yellow"), state, _HISTORY)
         
     state.is_finished = False
     state.teams = ["Not a team"]
     with pytest.raises(Exception, match="Nieprawidlowa druzyna"):
-        ruleset.decide_commit_foul(CommitFoul(team_index=0, offender_id="p1", minute=10, card="yellow"), state)
+        ruleset.decide_commit_foul(CommitFoul(team_index=0, offender_id="p1", minute=10, card="yellow"), state, _HISTORY)
 
 def test_knockout_rules_rejections() -> None:
     ruleset = FootballRuleSet(FootballMatchConfig())
@@ -69,12 +72,12 @@ def test_knockout_rules_rejections() -> None:
     
     state.is_finished = True
     with pytest.raises(Exception, match="Mecz jest zakonczony"):
-        ruleset.decide_take_penalty_kick(TakePenaltyKick(team_index=0, scored=True), state)
+        ruleset.decide_take_penalty_kick(TakePenaltyKick(team_index=0, scored=True), state, _HISTORY)
         
     state.is_finished = False
     state.phase = MatchPhase.REGULATION
     with pytest.raises(Exception, match="Rzuty karne dostepne tylko"):
-        ruleset.decide_take_penalty_kick(TakePenaltyKick(team_index=0, scored=True), state)
+        ruleset.decide_take_penalty_kick(TakePenaltyKick(team_index=0, scored=True), state, _HISTORY)
 
 def test_squad_rules_rejections() -> None:
     ruleset = FootballRuleSet(FootballMatchConfig())
@@ -82,15 +85,15 @@ def test_squad_rules_rejections() -> None:
     
     state.is_finished = True
     with pytest.raises(Exception, match="nie mozna zglosic skladu"):
-        ruleset.decide_submit_lineup(SubmitLineup(team_index=0, starting=("p1",), bench=()), state)
+        ruleset.decide_submit_lineup(SubmitLineup(team_index=0, starting=("p1",), bench=()), state, _HISTORY)
         
     state.is_finished = False
     state.teams = ["Not a team"]
     with pytest.raises(Exception, match="Nieprawidlowa druzyna"):
-        ruleset.decide_submit_lineup(SubmitLineup(team_index=0, starting=("p1",), bench=()), state)
+        ruleset.decide_submit_lineup(SubmitLineup(team_index=0, starting=("p1",), bench=()), state, _HISTORY)
         
     with pytest.raises(Exception, match="Nieprawidlowa druzyna"):
-        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state)
+        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state, _HISTORY)
 
 def test_advanced_scoring_and_foul_rejections() -> None:
     """Covers deep validation branches for scoring and fouls using Real objects."""
@@ -106,21 +109,21 @@ def test_advanced_scoring_and_foul_rejections() -> None:
     state.teams = [team_a]
     
     with pytest.raises(Exception, match="Wskazany strzelec nie nalezy do tej druzyny"):
-        ruleset.decide_score_goal(ScoreGoal(team_index=0, minute=10, scorer_id="ghost"), state)
+        ruleset.decide_score_goal(ScoreGoal(team_index=0, minute=10, scorer_id="ghost"), state, _HISTORY)
         
     with pytest.raises(Exception, match="Wskazany zawodnik nie nalezy do tej druzyny"):
-        ruleset.decide_commit_foul(CommitFoul(team_index=0, offender_id="ghost", minute=10, card="yellow"), state)
+        ruleset.decide_commit_foul(CommitFoul(team_index=0, offender_id="ghost", minute=10, card="yellow"), state, _HISTORY)
         
     state.disciplinary.is_dismissed.return_value = True
     with pytest.raises(Exception, match="Zawodnik zostal juz wykluczony z gry"):
-        ruleset.decide_commit_foul(CommitFoul(team_index=0, offender_id="p1", minute=10, card="yellow"), state)
+        ruleset.decide_commit_foul(CommitFoul(team_index=0, offender_id="p1", minute=10, card="yellow"), state, _HISTORY)
     state.disciplinary.is_dismissed.return_value = False
         
     with patch('src.sports.football.contest.football_rule_set._valid_minute', return_value=False):
         with pytest.raises(Exception, match="jest poza czasem gry"):
-            ruleset.decide_score_goal(ScoreGoal(team_index=0, minute=999, scorer_id="p1"), state)
+            ruleset.decide_score_goal(ScoreGoal(team_index=0, minute=999, scorer_id="p1"), state, _HISTORY)
         with pytest.raises(Exception, match="jest poza czasem gry"):
-            ruleset.decide_commit_foul(CommitFoul(team_index=0, offender_id="p1", minute=999, card="yellow"), state)
+            ruleset.decide_commit_foul(CommitFoul(team_index=0, offender_id="p1", minute=999, card="yellow"), state, _HISTORY)
 
 def test_advanced_substitution_rejections() -> None:
     """Covers all branches of substitution validation."""
@@ -138,28 +141,28 @@ def test_advanced_substitution_rejections() -> None:
     
     state.lineup_for.return_value = None
     with pytest.raises(Exception, match="Najpierw zglos sklad tej druzyny"):
-        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state)
+        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state, _HISTORY)
         
     mock_lineup = MagicMock()
     mock_lineup.is_on_pitch.return_value = False
     state.lineup_for.return_value = mock_lineup
     with pytest.raises(Exception, match="Zawodnik schodzacy nie znajduje sie na boisku"):
-        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state)
+        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state, _HISTORY)
         
     mock_lineup.is_on_pitch.return_value = True
     state.disciplinary.is_dismissed.return_value = True
     with pytest.raises(Exception, match="Nie mozna zmienic zawodnika, ktory zostal wykluczony"):
-        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state)
+        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state, _HISTORY)
         
     state.disciplinary.is_dismissed.return_value = False
     mock_lineup.is_on_bench.return_value = False
     with pytest.raises(Exception, match="Zawodnik wchodzacy nie znajduje sie na lawce rezerwowych"):
-        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state)
+        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state, _HISTORY)
         
     mock_lineup.is_on_bench.return_value = True
     mock_lineup.subs_made = 3
     with pytest.raises(Exception, match=r"Limit zmian \(3\) zostal osiagniety"):
-        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state)
+        ruleset.decide_substitute_player(SubstitutePlayer(team_index=0, player_out="p1", player_in="p2", minute=10), state, _HISTORY)
 
 @patch('src.sports.football.contest.football_rule_set.player_name_for_id', return_value="P1")
 def test_lineup_suspension_rejection(mock_player_name) -> None:
@@ -178,4 +181,4 @@ def test_lineup_suspension_rejection(mock_player_name) -> None:
     state.is_suspended.return_value = True
     
     with pytest.raises(Exception, match="jest zawieszony i nie moze byc zgloszony"):
-        ruleset.decide_submit_lineup(SubmitLineup(team_index=0, starting=("p1",), bench=()), state)
+        ruleset.decide_submit_lineup(SubmitLineup(team_index=0, starting=("p1",), bench=()), state, _HISTORY)

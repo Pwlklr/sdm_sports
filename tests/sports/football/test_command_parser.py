@@ -12,7 +12,7 @@ from src.sports.football.contest.commands import (
     TakePenaltyKick,
 )
 from src.sports.football.contest.football_match_config import FootballMatchConfig
-from src.sports.football.contest.state import FootballContestState, MatchPhase, create_football_contest_state
+from src.sports.football.contest.football_contest_state import FootballContestState, MatchPhase, create_football_contest_state
 from src.sports.football.contest.events import MatchStarted, PeriodStarted
 from src.sports.football.contest.entities import PeriodKind
 

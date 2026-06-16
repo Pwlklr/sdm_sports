@@ -19,7 +19,7 @@ from src.sports.football.contest.roster import (
     resolve_roster_player_by_number,
 )
 from src.sports.football.contest.roster_status import print_roster_report
-from src.sports.football.contest.state import FootballContestState, MatchPhase
+from src.sports.football.contest.football_contest_state import FootballContestState, MatchPhase
 
 
 def parse_football_command(

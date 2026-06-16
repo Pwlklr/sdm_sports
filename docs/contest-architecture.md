@@ -1,6 +1,6 @@
 # Architektura `Contest`
 
-`Contest` to **agregat event-sourcingowy**: źródłem prawdy jest append-only log (`_history`). `current_state` to **immutable projekcja** — wynik złożenia eventów przez `apply(fact) → Self`. `RuleSet` **nie mutuje** stanu; tylko decyduje, jakie fakty powstały, czytając `state`. Wynik sportowy buduje **`ResultBuilder`**, nie stan.
+`Contest` to **agregat event-sourcingowy**: źródłem prawdy jest append-only log (`_history`). `current_state` to **immutable projekcja** — wynik złożenia `ProjectionEvent` przez `apply(fact) → Self`. `RuleSet` **nie mutuje** stanu; tylko decyduje, jakie fakty powstały. Wynik sportowy buduje **`ResultBuilder` on-the-fly** — bez cache na agregacie.
 
 ---
 
@@ -10,250 +10,164 @@
 
 | Element | Rola |
 |---------|------|
-| `ContestState` | immutable projekcja meczu (Protocol) |
+| `ContestState` | immutable projekcja meczu (`@runtime_checkable` Protocol) |
 | `RuleSet` | silnik decyzji: command → eventy, event → reakcje |
-| `ResultBuilder` | materializuje `ContestResult` ze stanu po zakończeniu meczu |
-| `OfficialResultView` | wrapper wyniku (rozegrany + ewentualny override) |
-| `_history` | pełny log (fakty domenowe + meta-eventy `EventReversed`) |
+| `ResultBuilder` | materializuje `ContestResult` ze stanu (ABC) |
+| `_history` | pełny log (`ProjectionEvent`, `OfficialOverrideEvent`, `EventReversed`) |
 
-**Tworzenie** idzie przez `ContestFactory` — każdy sport rejestruje builder zwracający `ContestAssembly`:
-
-```python
-# src/sports/football/register_contest.py
-def _build_football_contest(contestants, config, **options):
-    state = create_football_contest_state(contestants, config, ...)
-    ruleset = FootballRuleSet(config, reversal_chain=...)
-    result_builder = FootballResultBuilder(config=config)
-    return ContestAssembly(state=state, ruleset=ruleset, result_builder=result_builder)
-
-ContestFactory.register(FOOTBALL_SPORT.id, _build_football_contest)
-```
-
-Factory opakowuje assembly w `Contest`:
-
-```python
-# src/core/contest/contest_factory.py
-assembly = cls._build(sport_id, contestants, config, **options)
-return Contest(assembly.state, assembly.ruleset, assembly.result_builder, contest_id=...)
-```
+**Tworzenie** idzie przez `ContestFactory` — każdy sport rejestruje builder zwracający `ContestAssembly`.
 
 **Rehydratacja** z zapisanego logu: `Contest.from_events()` → replay przez `_rebuild_state()`.
 
----
-
-## 2. Model wyniku — dwie fasety
-
-`ContestResult` to opublikowany snapshot zakończonego meczu:
-
-| Faseta | Odpowiedzialność | Kto czyta |
-|--------|------------------|-----------|
-| `ranking()` | miejsca w meczu (ex-aequo przy remisie) | `TournamentResultReader` |
-| `side_metrics()` | agregaty per strona/contestant | wszystkie metryki meczu |
-
-**Zagnieżdżenie individual w side:** statystyki zawodników nie są osobną fasetą interfejsu — siedzą w `side_metrics`:
-
-- **Darts** (gracz = strona): `DartsSideMetrics.by_contestant_id` — sets, legs, darts_thrown
-- **Football** (drużyna + skład): `FootballSideMetrics.by_team_id[team].players[player_id]` — gole, kartki, asysty
-
-`MatchMetricsReader` czyta wyłącznie `side_metrics()` (football: `side.all_players()`, darts: `by_contestant_id`).
-
-**Stan vs wynik:** `ContestantStats` w `ContestState` = live projection. `ResultBuilder` materializuje snapshot do `side_metrics` — downstream nie sięga do stanu po zakończeniu meczu.
-
-`OfficialResultView` trzyma `played` (z buildera po replay) i opcjonalny `official` (walkover, korekta komisji). `ContestOutcome` implementuje `ContestResult` z pustymi metrykami.
+**Implementacja stanu:** każdy sport definiuje własną projekcję jako **jawną implementację** protokołu core — np. `class FootballContestState(ContestState): ...`. Nie polegamy na duck typingu; kontrakt (`is_finished`, `contestants`, `apply`, `reset`) musi być zadeklarowany przez dziedziczenie z `ContestState`.
 
 ---
 
-## 3. Flow obsługi command (domenowego)
+## 2. Hierarchia eventów
 
-Punkt wejścia: `contest.handle(command)`.
+Wspólny korzeń domeny: [`src/core/event.py`](../src/core/event.py) — `Event(event_id, occurred_at, caused_by)`.
+
+```python
+Event                          # src/core/event.py
+├── TournamentEvent            # src/core/tournament/event.py
+│   ├── RegistrationOpened / RegistrationClosed
+│   ├── ContestantRegistered
+│   ├── PhaseStarted / PhaseCompleted
+│   ├── FixtureScheduled
+│   ├── MatchOutcomeRecorded
+│   └── TournamentCompleted
+└── ContestEvent               # src/core/contest/event.py
+    ├── ProjectionEvent        # fakt boiskowy — mutuje current_state (apply)
+    ├── OfficialOverrideEvent  # decyzja administracyjna — tylko audyt w logu
+    └── EventReversed          # meta: wycofanie wcześniejszego eventu
+        └── sport events (FootballEvent, GoalScored, ContestResultOverridden, …)
+```
+
+Sport dziedziczy przez własne bazy, np. `FootballEvent(ProjectionEvent)`, `ContestResultOverridden(OfficialOverrideEvent)`.
+
+**Przykłady:**
+
+| Typ | Football | Darts |
+|-----|----------|-------|
+| Projection | `GoalScored`, `MatchConcluded`, `GoalScorerCorrected` | `DartScored`, `MatchConcluded` |
+| Walkover command | `AwardWalkover(winner_id, reason)` | `AwardWalkover(winner_id, reason)` |
+| Override event | `ContestResultOverridden` | `ContestResultOverridden` |
+
+`Contest._record_event`: `OfficialOverrideEvent` → append bez `apply`; `ProjectionEvent` → `apply` + append.
+
+Sport-specific `isinstance` (np. `ContestResultOverridden`) **tylko** w `ResultBuilder` sportu — core używa wyłącznie markerów `OfficialOverrideEvent` / `ProjectionEvent`.
+
+Replay (`_rebuild_state`) używa wyłącznie `_effective_base_events()` (aktywne `ProjectionEvent`).
+
+---
+
+## 3. Kontrakt Contest (canonical)
+
+### Zapis
+
+| API | Semantyka |
+|-----|-----------|
+| `contest.handle(command)` | Jedyna ścieżka zmian (gole, walkover, korekty) |
+| `contest.history` | Pełny append-only log |
+
+### Odczyt wyniku
+
+Guard: **`current_state.is_finished`** (jedyny).
+
+| API | Semantyka |
+|-----|-----------|
+| `get_played_result()` | `ResultBuilder.build(state)` — wynik z boiska |
+| `get_official_result()` | `build(state)` lub `build_official(state, last_override)` |
+
+### Odczyt stanu / reversal
+
+| API | Semantyka |
+|-----|-----------|
+| `current_state` | Projekcja z `_effective_base_events()` |
+| `active_domain_events()` | Aktywne `ProjectionEvent` (kandydaci reversal) |
+
+### Walkover — trzy ścieżki
+
+| Sytuacja | Event | Mutacja stanu |
+|----------|-------|---------------|
+| Pre-match forfeit | `MatchConcluded` (`ProjectionEvent`) | `apply` — `winner_id`, `decided_by=reason` |
+| Post-match override | `ContestResultOverridden` (`OfficialOverrideEvent`) | tylko append (audit); wynik via `build_official()` |
+| In-match (np. za mało graczy) | `MatchConcluded(decided_by=walkover_…)` | `apply` |
+
+Korekty po meczu (np. `CorrectGoalScorer`): osobny command → `GoalScorerCorrected` (`ProjectionEvent` + applier).
+
+Football: command/override mogą nadać `winner_score`/`loser_score`. Oba sporty: `*AdminRules` mixin + `_own_command_handlers`; `register_contest` podaje `build_*_reversal_chain()`.
+
+---
+
+## 4. Flow obsługi command
 
 ```python
 def _handle_domain_command(self, command: Command) -> list[Event]:
-    emitted: list[Event] = []
-    queue: list[Event] = list(self._ruleset.decide(command, self.current_state))
-
+    queue = list(self._ruleset.decide(command, self.current_state, self._history))
     while queue:
         fact = queue.pop(0)
-        self._record_event(fact)
-        emitted.append(fact)
+        self._record_event(fact)  # apply lub audit
         for reaction in self._ruleset.react(fact, self.current_state):
             queue.append(replace(reaction, caused_by=fact.event_id))
-
-    return emitted
 ```
 
-**Kolejność w `_record_event`:**
-
-1. `current_state = current_state.apply(fact)` — nowa immutable projekcja
-2. append do `_history`
-3. `notify()` (Observer)
-4. `_refresh_result()` — jeśli `is_finished`, `result_builder.build(state)` trafia do `OfficialResultView.played`
-
-**Ważne:** `RuleSet` dostaje `state` tylko do **odczytu**. Mutacja danych z eventów jest zawsze po stronie `State.apply`.
+**Ważne:** `RuleSet` czyta `state` i `history`; mutacja danych z eventów jest po stronie `State.apply`.
 
 ---
 
-## 4. `ContestState` — immutable projekcja
+## 5. `ResultBuilder` (ABC)
 
 ```python
-class ContestState(Protocol):
-    @property
-    def is_finished(self) -> bool: ...
-    @property
-    def contestants(self) -> list[Contestant]: ...
-    def apply(self, fact: Event) -> Self: ...
-    def reset(self) -> Self: ...
-```
-
-Bez `build_result()` — stan nie interpretuje wyniku.
-
-### `ContestResult` — jawny interfejs (ABC)
-
-```python
-class ContestResult(ABC):
-    @abstractmethod
-    def is_finished(self) -> bool: ...
-    @abstractmethod
-    def ranking(self) -> tuple[RankedEntry, ...]: ...
-    @abstractmethod
-    def side_metrics(self) -> SideMetrics: ...
-```
-
-Implementacje: `class DartsResult(ContestResult)`, `class FootballResult(ContestResult)`, `class ContestOutcome(ContestResult)`.
-
-### Live stats (`ContestantStats`)
-
-Embedded w stanie sportowym, aktualizowane przez appliers:
-
-- Football: `FootballPlayerStats` (gole, kartki, asysty, dismissed)
-- Darts: `DartsPlayerStats` (sets_won, legs_won, darts_thrown, highest_checkout)
-
-### Dane z eventów vs kontekst setupu
-
-| Rodzaj danych | Skąd się bierze | Przykład |
-|---------------|-----------------|----------|
-| Event-sourced | `apply(fact)` | scores, lineups, phase, player_stats |
-| Setup | konstruktor / factory options | config, teams, suspended_player_ids |
-
-Przy `reset()` (replay) kopiujemy setup — np. zawieszenia turniejowe zostają na meczu (`with_tournament_context`).
-
-### Wzorzec `apply`
-
-Tabela `_appliers` + czyste funkcje `_apply_*` zwracające `replace(state, ...)`.
-
-**Podział odpowiedzialności:**
-
-| Warstwa | Odpowiada za |
-|---------|--------------|
-| `RuleSet` | „Czy wolno?”, „Co się wydarzyło?” → emituje `Event` |
-| `State.apply` | „Jak event zmienia dane meczu?” |
-| `ResultBuilder` | „Jaki jest sportowy wynik z aktualnej projekcji?” (ranking + side_metrics) |
-
----
-
-## 5. `ResultBuilder`
-
-```python
-class ResultBuilder(Protocol):
+class ResultBuilder(ABC):
     def build(self, state: ContestState) -> ContestResult: ...
+    def build_official(
+        self, state: ContestState, override: OfficialOverrideEvent
+    ) -> ContestResult: ...
 ```
 
-Sportowe implementacje (`FootballResultBuilder`, `DartsResultBuilder`) budują ranking i `side_metrics` (z zagnieżdżonymi statystykami graczy w piłce).
+`build_official` wołane tylko gdy w logu jest aktywny override. Football: ranking/scores z eventu, metryki graczy ze stanu (kartki zostają).
 
-Przykład football — remis ex-aequo: obie drużyny `place=1`. Statystyki graczy w `FootballTeamSideMetrics.players`.
+### Rankingi — ex-aequo, bez tiebreakerów
 
----
+`RankedEntry.place` odzwierciedla **jawnie ustalony wynik meczu**, nie sortuje uczestników po statystykach pomocniczych.
 
-## 6. Warstwa odczytu metryk
+| Sytuacja | Miejsca |
+|----------|---------|
+| Remis | wszyscy remisujący — ta sama `place` (np. 1) |
+| Jawny zwycięzca | zwycięzca `1`, pozostali wspólnie `2` (ex-aequo) |
+| Override administracyjny | `1` / `2` z payloadu override |
 
-| Reader | Źródło | Przypadek użycia |
-|--------|--------|------------------|
-| `TournamentResultReader` | `ranking()` | punkty H2H, awans knockout |
-| `MatchMetricsReader` | `side_metrics()` | zawieszenia, strzelcy, statystyki turniejowe |
-
-Rejestracja readerów w `SportPlugin.match_metrics_reader`; dostęp przez `SportsSystemEngine.get_match_metrics_reader(sport_id)`.
-
-Football: `FootballMatchMetricsReader.accrue_disciplinary(result, board)` czyta `side.all_players()`.
-
-Darts: `DartsMatchMetricsReader.player_totals(result)` czyta `side.by_contestant_id`.
+Core helpers (`single_first_place`, `head_to_head_points`, `is_ex_aequo_first`) czytają `place` — nie nadają miejsc.
 
 ---
 
-## 7. Interpretacja rankingu (turniej)
-
-`ContestResult` udostępnia wyłącznie fasety — **nie** interpretuje zwycięzcy. Turniej czyta `ranking()` przez helpery w `src/core/tournament/ranking.py` lub `TournamentResultReader`:
-
-- `single_first_place(ranking)` — jeden zwycięzca knockout 1v1
-- `is_ex_aequo_first(ranking)` — remis ex-aequo
-- `qualifiers_up_to_place(ranking, n)` — awans top-N
-- `head_to_head_points(...)` — punkty tabeli z miejsc w rankingu
-
-Sportowe `DartsResult` / `FootballResult` **implementują** `ContestResult` (ABC) — tylko dane + fasety, bez `get_winner()`.
-
----
-
-## 8. Flow obsługi reverse command
-
-Bez zmian względem poprzedniej architektury:
+## 6. Flow reversal
 
 ```
 ReverseDecision → RuleSet.decide_reversal → CoR → EventReversed
-→ append meta-events → state.reset() → replay effective_domain_events → refresh result
+→ append meta-events → state.reset() → replay _effective_base_events()
 ```
 
-CoR służy wyłącznie do zbudowania markerów `EventReversed`; faktyczna zmiana stanu następuje przy replay.
+Override w logu odwracalny przez `EventReversed`; nie wpływa na replay stanu, ale znika z `_effective_walkover_events()`.
 
 ---
 
-## 8. Co musi zdefiniować nowy sport
-
-### A. Model domeny
-
-- **`XxxMatchConfig`** — VO z parametrami meczu
-- **`Contestant`** — walidacja typu w factory
-
-### B. Event-sourcing
-
-- **`commands.py`** — intencje + ewentualnie `ReverseDecision`
-- **`events.py`** — fakty (frozen dataclasses)
-- **`XxxContestState`** — frozen dataclass; `apply` / `reset` / `contestants` / `is_finished`
-- **`XxxPlayerStats`** — live stats embedded w stanie
-- **`XxxRuleSet(RuleSet)`** — mixiny z handlerami
-
-### C. Wynik
-
-- **`XxxResult`** — implementuje `ContestResult` (ranking + side_metrics)
-- **`XxxResultBuilder`** — buduje wynik ze stanu
-- **`XxxMatchMetricsReader`** — ekstrakcja metryk do turnieju (opcjonalnie)
-
-### D. Rejestracja
-
-- **`register_contest.py`** — walidacja + `ContestAssembly` + `ContestFactory.register`
-- **`plugin.py`** — `SportPlugin(descriptor, adapter, match_metrics_reader=...)`
-
-### E. Czego **nie** robi sport w core
-
-- Nie implementuje `Contest` — tylko dostarcza assembly
-- Nie mutuje stanu w `RuleSet` — tylko zwraca eventy
-- Nie buduje wyniku w `State` — tylko `ResultBuilder`
-
----
-
-## 9. Podsumowanie przepływów
+## 7. Podsumowanie przepływów
 
 | Akcja | Ścieżka | Mutacja stanu |
 |-------|---------|---------------|
-| `StartMatch`, `ScoreGoal`, … | `decide` → kolejka → `react` | `apply` per event (nowy obiekt) |
-| Reversal | `decide_reversal` → CoR | `reset` + replay |
-| Koniec meczu | reaction → `MatchConcluded` | `apply` ustawia `is_finished` |
-| Odczyt wyniku | `get_final_result()` | `result_builder.build(state)` |
-| Metryki turniejowe | po meczu | `MatchMetricsReader` na `ContestResult` |
+| `ScoreGoal`, korekty, … | `decide` → kolejka → `react` | `apply` per `ProjectionEvent` |
+| Post-match walkover | `AwardWalkover` → `ContestResultOverridden` | tylko append (audit) |
+| Pre-match forfeit | `AwardWalkover` → `MatchConcluded` | `apply` |
+| Reversal | `decide_reversal` → CoR | `reset` + replay bazowych |
+| Odczyt wyniku | `get_official_result()` | `ResultBuilder` on-the-fly |
 
 ---
 
-## Zasada nadrzędna
+## 8. Zasada nadrzędna
 
-**Log decyduje o prawdzie, RuleSet o regułach, State o danych (immutable), ResultBuilder o wyniku, MatchMetricsReader o agregacji turniejowej.**
+**Log decyduje o prawdzie, RuleSet o regułach, State o danych (immutable), ResultBuilder o wyniku.**
 
 ---
 
@@ -261,8 +175,9 @@ CoR służy wyłącznie do zbudowania markerów `EventReversed`; faktyczna zmian
 
 | Obszar | Ścieżki |
 |--------|---------|
-| Aggregate | `src/core/contest/contest.py`, `contest_factory.py`, `contest_state.py`, `contest_result.py`, `result_builder.py` |
-| Metryki | `src/core/contest/metrics.py`, `match_metrics_reader.py` |
-| Piłka nożna | `src/sports/football/contest/`, `register_contest.py`, `plugin.py` |
-| Darts | `src/sports/darts/contest/`, `register_contest.py`, `plugin.py` |
-| Turniej ↔ mecz | `src/console/main.py`, `discipline_carryover.py`, `tournament_result_reader.py` |
+| Root event | `src/core/event.py` |
+| Aggregate | `src/core/contest/contest.py`, `event.py`, `result_builder.py` |
+| Turniej | `src/core/tournament/event.py`, `tournament.py`, `tournament_policy.py` |
+| Piłka nożna | `src/sports/football/contest/` |
+| Darts | `src/sports/darts/contest/` |
+| Turniej ↔ mecz | `RecordMatchOutcome` + `Contest.get_official_result()` |

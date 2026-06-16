@@ -16,7 +16,7 @@ from src.sports.football.contest.roster import (
 
 from src.sports.football.contest.roster_status import team_disciplinary_summary
 
-from src.sports.football.contest.state import create_football_contest_state
+from src.sports.football.contest.football_contest_state import create_football_contest_state
 
 
 

@@ -1,13 +1,21 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from abc import ABC, abstractmethod
 
-if TYPE_CHECKING:
-    from src.core.contest.contest_result import ContestResult
-    from src.core.contest.contest_state import ContestState
+from src.core.contest.contest_result import ContestResult
+from src.core.contest.contest_state import ContestState
+from src.core.contest.event import OfficialOverrideEvent
 
 
-class ResultBuilder(Protocol):
+class ResultBuilder(ABC):
     """Builds a sport-specific ContestResult snapshot from the current projection."""
 
-    def build(self, state: ContestState) -> ContestResult: ...
+    @abstractmethod
+    def build(self, state: ContestState) -> ContestResult:
+        pass
+
+    @abstractmethod
+    def build_official(
+        self, state: ContestState, override: OfficialOverrideEvent
+    ) -> ContestResult:
+        pass

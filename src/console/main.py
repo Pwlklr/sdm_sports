@@ -15,19 +15,13 @@ from src.core.sport.registered_sport import RegisteredSport
 from src.core.contestant import Contestant, IndividualPlayer, Team
 from src.core.system.sports_system_engine import SportsSystemEngine
 from src.core.tournament import Tournament
-from src.core.tournament.phase import (
-    GroupStagePhase,
-    KnockoutPhase,
-    TournamentPhase,
-)
-from src.core.tournament.draw import RandomDrawStrategy, RoundRobinDrawStrategy
+from src.core.tournament.event import FixtureScheduled
 from src.sports.darts.descriptor import DARTS_SPORT
 from src.sports.darts.plugin import DARTS_PLUGIN
 from src.sports.darts.contest.darts_contest_state import DartsContestState
 from src.sports.football.descriptor import FOOTBALL_SPORT
 from src.sports.football.plugin import FOOTBALL_PLUGIN
-from src.sports.football.contest.discipline_carryover import accrue_suspensions
-from src.sports.football.contest.state import FootballContestState
+from src.sports.football.contest.football_contest_state import FootballContestState
 
 
 def print_menu() -> None:
@@ -322,7 +316,6 @@ def play_tournament_match(
         return
 
     engine.complete_tournament_match(tournament, match.id)
-    _carry_over_discipline(tournament, match)
     engine.archive_match(match.id)
 
 
@@ -331,16 +324,8 @@ def _apply_suspension_context(tournament: Tournament, match: Contest) -> None:
     state = match.current_state
     if isinstance(state, FootballContestState):
         match.current_state = state.with_tournament_context(
-            suspended_player_ids=frozenset(
-                tournament.disciplinary_board.suspended_ids()
-            )
+            suspended_player_ids=tournament.state.discipline.suspended_ids()
         )
-
-
-def _carry_over_discipline(tournament: Tournament, match: Contest) -> None:
-    """After a football match, accrue cards into tournament-wide suspensions."""
-    if match.current_state.is_finished:
-        accrue_suspensions(tournament.disciplinary_board, match.get_final_result())
 
 
 def run_tournament_matches(
@@ -349,13 +334,19 @@ def run_tournament_matches(
     adapter: ConsoleAdapter,
 ) -> None:
     while not tournament.is_completed:
-        phase = tournament.current_phase
-        if phase is None:
+        phase_id = tournament.active_phase_id()
+        if phase_id is None and not tournament.is_completed:
             print("❌ Tournament has no active phase.")
             return
 
-        playable = active_matches(phase)
-        print(f"\n=== Turniej '{tournament.name}' | Faza: {phase.name} ===")
+        phase_name = phase_id or "?"
+        for phase in tournament.state.phases:
+            if phase.id == phase_id:
+                phase_name = phase.name
+                break
+
+        playable = active_matches(tournament)
+        print(f"\n=== Turniej '{tournament.name}' | Faza: {phase_name} ===")
         print("1. Rozegraj mecz")
         print("2. Tabela wynikow")
         print("3. Harmonogram i wyniki")
@@ -380,12 +371,12 @@ def run_tournament_matches(
 
         elif action == "2":
             print("\n--- TABELA ---")
-            for line in standings_table(phase):
+            for line in standings_table(tournament):
                 print(line)
 
         elif action == "3":
             print("\n--- HARMONOGRAM ---")
-            for line in schedule_view(phase):
+            for line in schedule_view(tournament):
                 print(line)
 
         elif action == "4":
@@ -449,40 +440,39 @@ def main() -> None:
             print("2. Group Stage (Round Robin)")
             format_choice = input("Choice: ").strip()
 
+            blueprint_id = "knockout_8" if format_choice == "1" else "league"
+
             try:
                 config = sport.adapter.collect_config()
             except ValueError:
                 print("❌ Invalid tournament config.")
                 continue
 
-            tournament = engine.create_tournament(t_name)
-
-            phase: TournamentPhase = (
-                KnockoutPhase("Playoffs", RandomDrawStrategy())
-                if format_choice == "1"
-                else GroupStagePhase("Group Stage", RoundRobinDrawStrategy())
+            tournament = engine.create_tournament(
+                t_name,
+                sport.descriptor.id,
+                blueprint_id,
+                match_config=config,
             )
-            tournament.add_phase(phase)
 
-            scheduled = engine.setup_tournament(
-                tournament, sport.descriptor.id, config, selected
-            )
+            scheduled = engine.setup_tournament(tournament, selected)
 
             print(f"\n🏆 --- {t_name.upper()} BRACKET GENERATED --- 🏆")
             for i, event in enumerate(scheduled):
-                sides = " vs ".join(c.name for c in event.match.contestants)
+                match = tournament.get_match(event.contest_id)
+                if match is None:
+                    continue
+                sides = " vs ".join(c.name for c in match.contestants)
                 print(f" Match {i + 1}: {sides}")
 
             run_tournament_matches(engine, tournament, sport.adapter)
 
             if tournament.is_completed:
                 print(f"\n🎊 TOURNAMENT '{tournament.name}' HAS CONCLUDED! 🎊")
-                finished_phase = tournament.phases[0]
-                qualifiers = finished_phase.get_qualifiers()
-                if qualifiers:
-                    print("Qualifiers:")
-                    for q in qualifiers:
-                        print(f"  - {q.display_name}")
+                champion_id = tournament.state.champion_id
+                if champion_id:
+                    name = tournament.state.contestants.get(champion_id, champion_id)
+                    print(f"Champion: {name}")
 
         elif choice == "4":
             active = engine.active_matches

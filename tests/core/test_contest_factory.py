@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from src.core.contest import Contest, ContestFactory
 from src.core.contest.command import Command
 from src.core.contest.contest_factory import ContestAssembly
-from src.core.contest.event import Event
+from src.core.contest.event import Event, ProjectionEvent
 from src.core.contestant import IndividualPlayer
 from src.core.contest.rule_set import RuleSet
 from tests.core.contest_test_support import (
@@ -21,7 +21,7 @@ class MockCommand(Command):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MockFact(Event):
+class MockFact(ProjectionEvent):
     pass
 
 
@@ -34,7 +34,9 @@ class MockState(StatefulContestState):
 
 
 class MockRuleSet(RuleSet):
-    def decide_mock(self, command: MockCommand, state: MockState) -> list[Event]:
+    def decide_mock(
+        self, command: MockCommand, state: MockState, history: list[Event]
+    ) -> list[Event]:
         return [MockFact()]
 
     command_handlers = {MockCommand: decide_mock}

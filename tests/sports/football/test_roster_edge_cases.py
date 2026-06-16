@@ -8,7 +8,7 @@ from src.sports.football.contest.roster import (
 )
 from src.sports.football.contestant.football_team import FootballTeam
 from src.core.contestant.models import IndividualPlayer
-from src.sports.football.contest.state import FootballContestState
+from src.sports.football.contest.football_contest_state import FootballContestState
 from src.core.contestant.models import IndividualPlayer
 from src.sports.football.contestant.football_team import FootballTeam
 

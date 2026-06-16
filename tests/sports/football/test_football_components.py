@@ -2,7 +2,7 @@ from src.core.contest import ContestFactory
 from src.core.contestant.models import IndividualPlayer, Team
 from src.sports.football.contest.football_match_config import FootballMatchConfig
 from src.sports.football.contest.football_rule_set import FootballRuleSet
-from src.sports.football.contest.state import FootballContestState
+from src.sports.football.contest.football_contest_state import FootballContestState
 from src.sports.football.descriptor import FOOTBALL_SPORT
 
 

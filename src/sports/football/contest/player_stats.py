@@ -24,6 +24,15 @@ class FootballPlayerStats:
             dismissed=self.dismissed,
         )
 
+    def with_goal_removed(self) -> FootballPlayerStats:
+        return FootballPlayerStats(
+            player_id=self.player_id,
+            goals=max(self.goals - 1, 0),
+            assists=self.assists,
+            yellow_cards=self.yellow_cards,
+            dismissed=self.dismissed,
+        )
+
     def with_yellow(self) -> FootballPlayerStats:
         return FootballPlayerStats(
             player_id=self.player_id,

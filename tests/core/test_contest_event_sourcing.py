@@ -131,7 +131,7 @@ def test_to_result_on_completed_match() -> None:
 
 
 
-    final = match.get_final_result()
+    final = match.get_official_result()
 
     assert isinstance(final, FootballResult)
 

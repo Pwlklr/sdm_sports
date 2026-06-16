@@ -55,6 +55,20 @@ class SubstitutePlayer(Command):
 
 
 @dataclass(frozen=True, kw_only=True)
+class AwardWalkover(Command):
+    winner_id: str
+    reason: str = "walkover"
+    winner_score: int = 3
+    loser_score: int = 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class CorrectGoalScorer(Command):
+    goal_event_id: str
+    new_scorer_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
 class VarOverturnGoal(ReverseDecision):
     pass
 
@@ -62,3 +76,18 @@ class VarOverturnGoal(ReverseDecision):
 @dataclass(frozen=True, kw_only=True)
 class RevokeCaution(ReverseDecision):
     pass
+
+
+__all__ = [
+    "AwardWalkover",
+    "CommitFoul",
+    "CorrectGoalScorer",
+    "EndPeriod",
+    "RevokeCaution",
+    "ScoreGoal",
+    "StartMatch",
+    "SubmitLineup",
+    "SubstitutePlayer",
+    "TakePenaltyKick",
+    "VarOverturnGoal",
+]
